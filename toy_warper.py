@@ -1,6 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pdb
+import sys
+
+sys.path.insert(-1, "/workspace/code/landmark-distortion")
+from get_rigid_body_motion import get_motion_estimate_from_svd
 
 
 def get_transform_by_translation_and_theta(translation_x, translation_y, theta):
@@ -85,7 +89,10 @@ def plot_points_and_poses(P1, P2, start_position, end_position):
 
 def main():
     print("Running kinematics on toy data...")
-    pose = get_transform_by_translation_and_theta(translation_x=2, translation_y=0.5, theta=0.2)
+    T_offset = np.array([2, 0.5])
+    theta_offset = 0.2
+    pose = get_transform_by_translation_and_theta(translation_x=T_offset[0], translation_y=T_offset[1],
+                                                  theta=theta_offset)
 
     x_coords = np.array([1, 1.5, 1, -1, -1])
     y_coords = np.array([-1, 0, 1, 1, -1])
@@ -93,13 +100,20 @@ def main():
     P1 = np.array([x_coords, y_coords, np.zeros(num_points), np.ones(num_points)])
     P2 = np.linalg.inv(pose) @ P1
 
+    xy_points_previous = np.array([P1[0], P1[1]])
+    xy_points_live = np.array([P2[0], P2[1]])
+
+    v, theta_R = get_motion_estimate_from_svd(xy_points_live, xy_points_previous, np.ones(5))
+    print("True translation:\n", T_offset, "\n estimate:", v)
+    print("True rotation:", theta_offset, "\n estimate:", theta_R)
+
     start_position = np.array([0, 0])
     end_position = [0, 0]
     end_position = np.r_[end_position, 0, 1]  # add z = 0, and final 1 for homogenous coordinates for se3 multiplication
     end_position = pose @ end_position
 
     print("start_position:", start_position)
-    print("end_position:", end_position)
+    print("end_position:", end_position[0:2])
     plot_points_and_poses(P1, P2, start_position, end_position)
 
 
