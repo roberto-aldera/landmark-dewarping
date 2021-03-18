@@ -99,23 +99,32 @@ def plot_points_and_poses(P1, P2, relative_pose):
     plt.close()
 
 
-def get_and_compare_estimates(x_y_theta_gt, live_points, previous_points):
-    v, theta_R = get_motion_estimate_from_svd(live_points, previous_points, np.ones(5))
+def get_and_compare_estimates(live_points, previous_points):
+    v, theta_R = get_motion_estimate_from_svd(live_points, previous_points, weights=np.ones(live_points.shape[1]))
     x_y_theta_estimate = [v[0], v[1], theta_R]
-    logger.info(f'True/estimate translation: {x_y_theta_gt} <-> {x_y_theta_estimate}')
     return x_y_theta_estimate
 
 
-def add_noise_to_points(noisy_points, noise_standard_deviation=0.1):
+def get_points_with_added_noise(points, noise_standard_deviation=0.1):
+    noisy_points = np.array(points)
     noisy_points[0] += np.random.normal(0, noise_standard_deviation, noisy_points.shape[1])
     noisy_points[1] += np.random.normal(0, noise_standard_deviation, noisy_points.shape[1])
     return noisy_points
 
 
-def warping_function(warped_points, warping_factor_x=1.2, warping_factor_y=1.2):
+def get_warped_points(points_to_warp, warping_factor_x=1.2, warping_factor_y=1.2):
+    warped_points = np.array(points_to_warp)
     warped_points[0] *= warping_factor_x
     warped_points[1] *= warping_factor_y
     return warped_points
+
+
+def generate_simple_error_metrics(x_y_theta_gt, x_y_theta_estimate):
+    errors = np.array(x_y_theta_gt) - np.array(x_y_theta_estimate)
+    translational_error = np.linalg.norm(np.array([errors[0], errors[1]]))
+    logger.info(f'True/estimate translation: {x_y_theta_gt} <-> {x_y_theta_estimate}')
+    logger.info(f'Translational error (m): {translational_error}')
+    logger.info(f'Angular error (deg): {errors[2] * 180 / np.pi}')
 
 
 def main():
@@ -142,13 +151,15 @@ def main():
     xy_points_previous = np.array([P1[0], P1[1]])
     xy_points_live = np.array([P2[0], P2[1]])
 
-    noisy_xy_points_live = add_noise_to_points(xy_points_live, noise_standard_deviation=0.05)
+    noisy_xy_points_live = get_points_with_added_noise(xy_points_live, noise_standard_deviation=0.05)
+    warped_xy_points_live = get_warped_points(noisy_xy_points_live, warping_factor_x=1.2, warping_factor_y=0.8)
 
-    x_y_theta_estimate = get_and_compare_estimates(x_y_theta_gt, noisy_xy_points_live, xy_points_previous)
-
-    warped_xy_points_live = warping_function(noisy_xy_points_live, warping_factor_x=1.2, warping_factor_y=0.8)
-    x_y_theta_estimate_warped = get_and_compare_estimates(x_y_theta_gt, warped_xy_points_live,
+    x_y_theta_estimate = get_and_compare_estimates(noisy_xy_points_live, xy_points_previous)
+    x_y_theta_estimate_warped = get_and_compare_estimates(warped_xy_points_live,
                                                           xy_points_previous)
+
+    generate_simple_error_metrics(x_y_theta_gt, x_y_theta_estimate)
+    generate_simple_error_metrics(x_y_theta_gt, x_y_theta_estimate_warped)
 
     estimated_pose = get_transform_by_translation_and_theta(translation_x=x_y_theta_estimate_warped[0],
                                                             translation_y=x_y_theta_estimate_warped[1],
