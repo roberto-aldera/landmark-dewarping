@@ -2,10 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pdb
 import sys
+import logging
 
 sys.path.insert(-1, "/workspace/code/landmark-distortion")
 from get_rigid_body_motion import get_motion_estimate_from_svd
 
+# create logger
+logger = logging.getLogger('__name__')
 np.random.seed(0)
 
 
@@ -96,19 +99,39 @@ def plot_points_and_poses(P1, P2, relative_pose):
     plt.close()
 
 
-def add_noise_to_points(points, noise_standard_deviation=0.1):
-    noisy_points = np.array(points)
-    noisy_points[0] += np.random.normal(0, noise_standard_deviation, points.shape[1])
-    noisy_points[1] += np.random.normal(0, noise_standard_deviation, points.shape[1])
+def get_and_compare_estimates(x_y_theta_gt, live_points, previous_points):
+    v, theta_R = get_motion_estimate_from_svd(live_points, previous_points, np.ones(5))
+    x_y_theta_estimate = [v[0], v[1], theta_R]
+    logger.info(f'True/estimate translation: {x_y_theta_gt} <-> {x_y_theta_estimate}')
+    return x_y_theta_estimate
+
+
+def add_noise_to_points(noisy_points, noise_standard_deviation=0.1):
+    noisy_points[0] += np.random.normal(0, noise_standard_deviation, noisy_points.shape[1])
+    noisy_points[1] += np.random.normal(0, noise_standard_deviation, noisy_points.shape[1])
     return noisy_points
 
 
+def warping_function(warped_points, warping_factor_x=1.2, warping_factor_y=1.2):
+    warped_points[0] *= warping_factor_x
+    warped_points[1] *= warping_factor_y
+    return warped_points
+
+
 def main():
-    print("Running kinematics on toy data...")
+    logging_level = logging.INFO
+    logger.setLevel(logging_level)
+    # create console handler and set level to debug
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    logger.addHandler(ch)
+    logger.info("Running kinematics on toy data...")
+
     T_offset = np.array([2, 0.5])
     theta_offset = 0.2
-    pose = get_transform_by_translation_and_theta(translation_x=T_offset[0], translation_y=T_offset[1],
-                                                  theta=theta_offset)
+    x_y_theta_gt = [T_offset[0], T_offset[1], theta_offset]
+    pose = get_transform_by_translation_and_theta(translation_x=x_y_theta_gt[0], translation_y=x_y_theta_gt[1],
+                                                  theta=x_y_theta_gt[2])
 
     x_coords = np.array([1, 1.5, 1, -1, -1])
     y_coords = np.array([-1, 0, 1, 1, -1])
@@ -120,15 +143,18 @@ def main():
     xy_points_live = np.array([P2[0], P2[1]])
 
     noisy_xy_points_live = add_noise_to_points(xy_points_live, noise_standard_deviation=0.05)
-    P2[0] = noisy_xy_points_live[0]
-    P2[1] = noisy_xy_points_live[1]
 
-    v, theta_R = get_motion_estimate_from_svd(noisy_xy_points_live, xy_points_previous, np.ones(5))
-    print("True translation:\n", T_offset, "\n estimate:", v)
-    print("True rotation:", theta_offset, "\n estimate:", theta_R)
+    x_y_theta_estimate = get_and_compare_estimates(x_y_theta_gt, noisy_xy_points_live, xy_points_previous)
 
-    estimated_pose = get_transform_by_translation_and_theta(translation_x=v[0], translation_y=v[1],
-                                                            theta=theta_R)
+    warped_xy_points_live = warping_function(noisy_xy_points_live, warping_factor_x=1.2, warping_factor_y=0.8)
+    x_y_theta_estimate_warped = get_and_compare_estimates(x_y_theta_gt, warped_xy_points_live,
+                                                          xy_points_previous)
+
+    estimated_pose = get_transform_by_translation_and_theta(translation_x=x_y_theta_estimate_warped[0],
+                                                            translation_y=x_y_theta_estimate_warped[1],
+                                                            theta=x_y_theta_estimate_warped[2])
+    P2[0] = warped_xy_points_live[0]
+    P2[1] = warped_xy_points_live[1]
     plot_points_and_poses(P1, P2, estimated_pose)
 
 
