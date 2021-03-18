@@ -6,6 +6,8 @@ import sys
 sys.path.insert(-1, "/workspace/code/landmark-distortion")
 from get_rigid_body_motion import get_motion_estimate_from_svd
 
+np.random.seed(0)
+
 
 def get_transform_by_translation_and_theta(translation_x, translation_y, theta):
     T_offset = np.array([[translation_x], [translation_y]])
@@ -39,7 +41,14 @@ def get_robot_to_world_transform():
     return rot_z @ rot_y
 
 
-def plot_points_and_poses(P1, P2, start_position, end_position):
+def plot_points_and_poses(P1, P2, relative_pose):
+    start_position = np.array([0, 0])
+    end_position = [0, 0]
+    end_position = np.r_[end_position, 0, 1]  # add z = 0, and final 1 for homogenous coordinates for se3 multiplication
+    end_position = relative_pose @ end_position
+
+    print("start_position:", start_position)
+    print("end_position:", end_position[0:2])
     T_robot_to_world = get_robot_to_world_transform()
     end_position = T_robot_to_world @ end_position
     P1 = T_robot_to_world @ P1
@@ -87,6 +96,13 @@ def plot_points_and_poses(P1, P2, start_position, end_position):
     plt.close()
 
 
+def add_noise_to_points(points, noise_standard_deviation=0.1):
+    noisy_points = np.array(points)
+    noisy_points[0] += np.random.normal(0, noise_standard_deviation, points.shape[1])
+    noisy_points[1] += np.random.normal(0, noise_standard_deviation, points.shape[1])
+    return noisy_points
+
+
 def main():
     print("Running kinematics on toy data...")
     T_offset = np.array([2, 0.5])
@@ -103,18 +119,17 @@ def main():
     xy_points_previous = np.array([P1[0], P1[1]])
     xy_points_live = np.array([P2[0], P2[1]])
 
-    v, theta_R = get_motion_estimate_from_svd(xy_points_live, xy_points_previous, np.ones(5))
+    noisy_xy_points_live = add_noise_to_points(xy_points_live, noise_standard_deviation=0.05)
+    P2[0] = noisy_xy_points_live[0]
+    P2[1] = noisy_xy_points_live[1]
+
+    v, theta_R = get_motion_estimate_from_svd(noisy_xy_points_live, xy_points_previous, np.ones(5))
     print("True translation:\n", T_offset, "\n estimate:", v)
     print("True rotation:", theta_offset, "\n estimate:", theta_R)
 
-    start_position = np.array([0, 0])
-    end_position = [0, 0]
-    end_position = np.r_[end_position, 0, 1]  # add z = 0, and final 1 for homogenous coordinates for se3 multiplication
-    end_position = pose @ end_position
-
-    print("start_position:", start_position)
-    print("end_position:", end_position[0:2])
-    plot_points_and_poses(P1, P2, start_position, end_position)
+    estimated_pose = get_transform_by_translation_and_theta(translation_x=v[0], translation_y=v[1],
+                                                            theta=theta_R)
+    plot_points_and_poses(P1, P2, estimated_pose)
 
 
 if __name__ == "__main__":
