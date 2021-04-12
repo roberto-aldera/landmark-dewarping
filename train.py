@@ -3,12 +3,8 @@ from argparse import ArgumentParser
 from pathlib import Path
 import time
 from cmnet import CMNet
+from custom_dataloader import LandmarksDataModule
 import settings
-
-import os
-from torch.utils.data import DataLoader, random_split
-from torchvision.datasets import MNIST
-from torchvision import transforms
 
 if __name__ == '__main__':
     start_time = time.time()
@@ -33,14 +29,11 @@ if __name__ == '__main__':
     if params.model_name == "cmnet":
         model = CMNet(params)
 
-    # Init DataLoader from MNIST Dataset
-    train_ds = MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
-    train_loader = DataLoader(train_ds, batch_size=32)
-
     trainer = pl.Trainer.from_argparse_args(params,
                                             default_root_dir=settings.MODEL_DIR,
                                             max_epochs=params.max_num_epochs)
-    trainer.fit(model, train_loader)
+    dm = LandmarksDataModule()
+    trainer.fit(model, dm)
 
     # save checkpoint that will be used for running evaluation
     path_to_model = "%s%s%s" % (settings.MODEL_DIR, params.model_name, ".ckpt")

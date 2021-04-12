@@ -14,13 +14,14 @@ TEST_SUBSET = "test"
 # TOTAL_SAMPLES = 10000
 # TRAIN_RATIO = 0.8
 # VAL_RATIO = 0.1
-TOTAL_SAMPLES = 1
+TOTAL_SAMPLES = 75
 TRAIN_RATIO = 0.9
 VAL_RATIO = 0.05
 TRAIN_SET_SIZE = int(TOTAL_SAMPLES * TRAIN_RATIO)
 VAL_SET_SIZE = int(TOTAL_SAMPLES * VAL_RATIO)
 TEST_SET_SIZE = TOTAL_SAMPLES - (TRAIN_SET_SIZE + VAL_SET_SIZE)
-
+LANDMARK_MEAN = 0
+LANDMARK_STD_DEV = 1
 
 # Models
 ARCHITECTURE_TYPE = "cmnet"
@@ -40,5 +41,6 @@ if IS_RUNNING_ON_SERVER is True:
     RESULTS_DIR = ROOT_DIR + "evaluation/"
 else:
     ROOT_DIR = "/workspace/data/landmark-dewarping/"
+    DATA_DIR = ROOT_DIR + "tmp_data_store/"
     MODEL_DIR = ROOT_DIR + "models/"
     RESULTS_DIR = ROOT_DIR + "evaluation/"
