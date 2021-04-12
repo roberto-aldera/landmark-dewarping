@@ -1,7 +1,9 @@
 import numpy as np
 import torch
 import pdb
+import csv
 import sys
+from tqdm import tqdm
 import settings
 from custom_dataloader import LandmarksDataModule
 
@@ -71,6 +73,16 @@ class CircularMotionEstimationBase(torch.nn.Module):
         # return theta_estimate, curvature_estimate
 
 
+def get_data_from_csv(csv_file):
+    with open(csv_file, newline='') as f:
+        reader = csv.reader(f)
+        motion_estimate_data = list(reader)
+
+    # timestamps = [int(item[0]) for item in motion_estimate_data]
+    dx = [float(items[3]) for items in motion_estimate_data]
+    return dx
+
+
 if __name__ == "__main__":
     print("Running :)")
     # Just a place to test the circular motion estimates are working as expected
@@ -81,7 +93,7 @@ if __name__ == "__main__":
 
     cm_estimates = []
 
-    for data in dl:
+    for data in tqdm(dl):
         landmarks, cm_parameters = data['landmarks'], data['cm_parameters']
         cm_estimate = the_thing(landmarks)
         cm_estimates.append(cm_estimate)
@@ -105,3 +117,21 @@ if __name__ == "__main__":
 
     timestamps = np.zeros(len(cm_estimates))
     save_timestamps_and_cme_to_csv(timestamps, motion_estimates, "cm-est", settings.RESULTS_DIR)
+
+    dx_est = get_data_from_csv("/workspace/data/landmark-dewarping/evaluation/cm-est_poses.csv")
+    dx_gt = get_data_from_csv("/workspace/data/landmark-dewarping/tmp_data_store/training/gt_poses.csv")
+
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(15, 5))
+    dim = settings.TOTAL_SAMPLES + 50
+    plt.xlim(0, dim)
+    plt.grid()
+    plt.plot(np.array(dx_gt), 'k+-', label="dx_gt")
+    plt.plot(np.array(dx_est), '+-', label="dx_est")
+    plt.title("Pose estimates")
+    plt.xlabel("Sample index")
+    plt.ylabel("units/sample")
+    plt.legend()
+    plt.savefig("%s%s" % (settings.RESULTS_DIR, "/pose_comparison.pdf"))
+    plt.close()
