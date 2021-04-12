@@ -1,6 +1,13 @@
+import numpy as np
 import torch
 import pdb
+import sys
+import settings
 from custom_dataloader import LandmarksDataModule
+
+sys.path.insert(-1, "/workspace/code/landmark-distortion")
+from R_and_theta_utilities import get_transform_by_r_and_theta
+from get_cme_parameters_from_gt import save_timestamps_and_cme_to_csv, MotionEstimate
 
 
 class CircularMotionEstimationBase(torch.nn.Module):
@@ -78,4 +85,23 @@ if __name__ == "__main__":
         landmarks, cm_parameters = data['landmarks'], data['cm_parameters']
         cm_estimate = the_thing(landmarks)
         cm_estimates.append(cm_estimate)
-    pdb.set_trace()
+
+    # Assuming batch size = 1 for this checking section...
+    motion_estimates = []
+    for idx in range(len(cm_estimates)):
+        th_estimate = np.array(cm_estimates[idx][0])
+        curvature_estimate = np.array(cm_estimates[idx][1])
+        if curvature_estimate == 0:
+            r_estimate = np.inf
+        else:
+            r_estimate = 1 / curvature_estimate
+
+        se3_from_r_theta = get_transform_by_r_and_theta(r_estimate, th_estimate)
+        x_est = se3_from_r_theta[0, 3]
+        y_est = se3_from_r_theta[1, 3]
+        th_est = np.arctan2(se3_from_r_theta[1, 0], se3_from_r_theta[0, 0])
+        motion_estimates.append(
+            MotionEstimate(theta=th_estimate, curvature=curvature_estimate, dx=x_est, dy=y_est, dth=th_est))
+
+    timestamps = np.zeros(len(cm_estimates))
+    save_timestamps_and_cme_to_csv(timestamps, motion_estimates, "cm-est", settings.RESULTS_DIR)

@@ -98,7 +98,7 @@ class LandmarksDataModule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
         self.root_dir = "/workspace/data/landmark-distortion/tmp_data_store/"
-        self.batch_size = 2
+        self.batch_size = settings.BATCH_SIZE
         # self.transform = transforms.Compose([transforms.ToTensor()])
 
     # def prepare_data(self):
