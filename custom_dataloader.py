@@ -107,7 +107,8 @@ class LandmarksDataModule(pl.LightningDataModule):
     #     raise NotImplementedError
 
     def setup(self, stage=None):
-        data_transform_for_training = transforms.Compose([ToTensor(), Normalise(), ZeroPadding()])
+        # data_transform_for_training = transforms.Compose([ToTensor(), Normalise(), ZeroPadding()])
+        data_transform_for_training = transforms.Compose([ToTensor(), ZeroPadding()])
         data = LandmarkDataset(root_dir=settings.DATA_DIR, data_subset_type=settings.TRAIN_SUBSET,
                                transform=data_transform_for_training)
         self.train_data = data
@@ -115,8 +116,7 @@ class LandmarksDataModule(pl.LightningDataModule):
         self.test_data = None
 
     def train_dataloader(self):
-        return DataLoader(self.train_data,
-                          batch_size=self.batch_size)
+        return DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True, num_workers=4)
 
     def val_dataloader(self):
         return DataLoader(self.valid_data,

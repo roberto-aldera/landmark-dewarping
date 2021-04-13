@@ -21,7 +21,8 @@ class CircularMotionEstimationBase(torch.nn.Module):
         thetas, curvatures = self.get_thetas_and_curvatures_from_ranges_and_bearings(ranges, bearings)
         # pick theta (and its curvature) based on some heuristic (median)
         theta_estimate, curvature_estimate = self.select_theta_and_curvature(thetas, curvatures, validity_mask)
-        return theta_estimate, curvature_estimate
+        # pdb.set_trace()
+        return torch.cat([theta_estimate, curvature_estimate], dim=1)  # dimensions here still TBD
 
     def get_ranges_and_bearings_from_cartesian(self, x):
         validity_mask = torch.zeros(x.shape[0:2])
@@ -64,7 +65,8 @@ class CircularMotionEstimationBase(torch.nn.Module):
             curvature_estimate = valid_curvatures[median_index]
             theta_estimates.append(theta_estimate)
             curvature_estimates.append(curvature_estimate)
-        return torch.tensor(theta_estimates), torch.tensor(curvature_estimates)
+        return torch.tensor(theta_estimates, requires_grad=True).view(thetas.shape[0], -1), \
+               torch.tensor(curvature_estimates, requires_grad=True).view(thetas.shape[0], -1)
 
         # # Might replace this going forward and use the mask (or some sort of weighted score) to pick theta
         # theta_estimate, median_indices = torch.median(thetas, dim=1)
