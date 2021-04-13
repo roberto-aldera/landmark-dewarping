@@ -17,15 +17,14 @@ class CMNet(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.cme = CircularMotionEstimationBase()
-        self.fc1 = torch.nn.Linear(in_features=1200 * 4, out_features=1200 * 4)
+        self.fc1 = torch.nn.Linear(in_features=1200 * 4, out_features=1200 * 2)
         # self.loss = None  # probably an L1 but do this later
 
     def forward(self, x):
-        # pdb.set_trace()
         b, n, c = x.shape
-        x = x + self.fc1(x.float().flatten(1)).view(b, n, c)
-        # Still need to account for the correction additions here. The network predicts corrections,
-        # which are then added on to the original inputs (but on only 2 of the 4)
+        predictions = self.fc1(x.float().flatten(1)).view(b, n, 2)  # only predicting corrections on x2 and y2 positions
+        padded_predictions = func.pad(predictions, pad=(0, 2, 0, 0))
+        x = x + padded_predictions
         return self.cme(x)
 
     def training_step(self, batch, batch_nb):
