@@ -64,12 +64,12 @@ class CircularMotionEstimationBase(torch.nn.Module):
             curvature_estimate = valid_curvatures[median_index]
             theta_estimates.append(theta_estimate)
             curvature_estimates.append(curvature_estimate)
+        return torch.tensor(theta_estimates), torch.tensor(curvature_estimates)
 
         # # Might replace this going forward and use the mask (or some sort of weighted score) to pick theta
         # theta_estimate, median_indices = torch.median(thetas, dim=1)
         # # Pick the curvature that corresponds to the median theta in each batch
         # curvature_estimate = torch.gather(curvatures, 1, median_indices.unsqueeze(2))
-        return torch.tensor(theta_estimates), torch.tensor(curvature_estimates)
         # return theta_estimate, curvature_estimate
 
 
@@ -80,23 +80,47 @@ def get_data_from_csv(csv_file):
 
     # timestamps = [int(item[0]) for item in motion_estimate_data]
     dx = [float(items[3]) for items in motion_estimate_data]
-    return dx
+    dy = [float(items[4]) for items in motion_estimate_data]
+    dth = [float(items[5]) for items in motion_estimate_data]
+    return [dx, dy, dth]
 
 
-if __name__ == "__main__":
-    print("Running :)")
-    # Just a place to test the circular motion estimates are working as expected
+def do_quick_plot_from_csv_files(gt_csv_file, est_csv_file):
+    import matplotlib.pyplot as plt
+
+    # Read in CSVs for comparison
+    gt_x_y_th = get_data_from_csv(gt_csv_file)
+    est_x_y_th = get_data_from_csv(est_csv_file)
+
+    plt.figure(figsize=(15, 5))
+    dim = settings.TOTAL_SAMPLES + 50
+    plt.xlim(0, dim)
+    plt.grid()
+    plt.plot(np.array(gt_x_y_th[0]), '+-', label="dx_gt")
+    plt.plot(np.array(gt_x_y_th[1]), '+-', label="dy_gt")
+    plt.plot(np.array(gt_x_y_th[2]), '+-', label="dth_gt")
+    plt.plot(np.array(est_x_y_th[0]), '+-', label="dx_est")
+    plt.plot(np.array(est_x_y_th[1]), '+-', label="dy_est")
+    plt.plot(np.array(est_x_y_th[2]), '+-', label="dth_est")
+    plt.title("Pose estimates")
+    plt.xlabel("Sample index")
+    plt.ylabel("units/sample")
+    plt.legend()
+    plt.savefig("%s%s" % (settings.RESULTS_DIR, "/pose_comparison.pdf"))
+    plt.close()
+
+
+def check_cm_pipeline_and_optionally_export_csv(do_csv_export=False):
     dm = LandmarksDataModule()
     dm.setup()
-    the_thing = CircularMotionEstimationBase()
+    cm_estimator = CircularMotionEstimationBase()
     dl = dm.train_dataloader()
 
     cm_estimates = []
 
     for data in tqdm(dl):
         landmarks, cm_parameters = data['landmarks'], data['cm_parameters']
-        cm_estimate = the_thing(landmarks)
-        cm_estimates.append(cm_estimate)
+        cm_estimates.append(cm_estimator(landmarks))
 
     # Assuming batch size = 1 for this checking section...
     motion_estimates = []
@@ -114,24 +138,14 @@ if __name__ == "__main__":
         th_est = np.arctan2(se3_from_r_theta[1, 0], se3_from_r_theta[0, 0])
         motion_estimates.append(
             MotionEstimate(theta=th_estimate, curvature=curvature_estimate, dx=x_est, dy=y_est, dth=th_est))
+    if do_csv_export:
+        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(cm_estimates)), motion_estimates=motion_estimates,
+                                       pose_source="cm-est", export_folder=settings.RESULTS_DIR)
 
-    timestamps = np.zeros(len(cm_estimates))
-    save_timestamps_and_cme_to_csv(timestamps, motion_estimates, "cm-est", settings.RESULTS_DIR)
 
-    dx_est = get_data_from_csv("/workspace/data/landmark-dewarping/evaluation/cm-est_poses.csv")
-    dx_gt = get_data_from_csv("/workspace/data/landmark-dewarping/tmp_data_store/training/gt_poses.csv")
+if __name__ == "__main__":
+    print("Running circular motion function script...")
+    check_cm_pipeline_and_optionally_export_csv(do_csv_export=True)
 
-    import matplotlib.pyplot as plt
-
-    plt.figure(figsize=(15, 5))
-    dim = settings.TOTAL_SAMPLES + 50
-    plt.xlim(0, dim)
-    plt.grid()
-    plt.plot(np.array(dx_gt), 'k+-', label="dx_gt")
-    plt.plot(np.array(dx_est), '+-', label="dx_est")
-    plt.title("Pose estimates")
-    plt.xlabel("Sample index")
-    plt.ylabel("units/sample")
-    plt.legend()
-    plt.savefig("%s%s" % (settings.RESULTS_DIR, "/pose_comparison.pdf"))
-    plt.close()
+    do_quick_plot_from_csv_files(gt_csv_file="/workspace/data/landmark-dewarping/tmp_data_store/training/gt_poses.csv",
+                                 est_csv_file="/workspace/data/landmark-dewarping/evaluation/cm-est_poses.csv")
