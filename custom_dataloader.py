@@ -28,7 +28,7 @@ class LandmarkDataset:
     def __len__(self):
         subset_size = 0
         if self.data_subset_type == settings.TRAIN_SUBSET:
-            subset_size = settings.TRAIN_SET_SIZE
+            subset_size = settings.TOTAL_SAMPLES  # settings.TRAIN_SET_SIZE
         elif self.data_subset_type == settings.VAL_SUBSET:
             subset_size = settings.VAL_SET_SIZE
         elif self.data_subset_type == settings.TEST_SUBSET:
@@ -62,7 +62,6 @@ class ToTensor(object):
 
     def __call__(self, sample):
         landmarks, cm_parameters = sample['landmarks'], sample['cm_parameters']
-        # pdb.set_trace()
         return {'landmarks': torch.tensor(landmarks.values),
                 'cm_parameters': torch.tensor(cm_parameters.values)}
 
@@ -72,7 +71,6 @@ class ZeroPadding(object):
 
     def __call__(self, sample):
         landmarks, cm_parameters = sample['landmarks'], sample['cm_parameters']
-        # pdb.set_trace()
         # TODO: Later when we are shuffling, just sample K landmarks every time
         k_expected_max_landmarks = 1200
         pad_size = k_expected_max_landmarks - len(landmarks)
@@ -99,20 +97,18 @@ class LandmarksDataModule(pl.LightningDataModule):
         super().__init__()
         self.root_dir = "/workspace/data/landmark-distortion/tmp_data_store/"
         self.batch_size = settings.BATCH_SIZE
-        # self.transform = transforms.Compose([transforms.ToTensor()])
+        self.transform = transforms.Compose([ToTensor(), ZeroPadding()])
 
     # def prepare_data(self):
-    #     # Not sure we need this function yet
-    #     # gt_cm_parameters = pd.read_csv(self.root_dir + "gt_poses.csv", header=None)
     #     raise NotImplementedError
 
     def setup(self, stage=None):
-        # data_transform_for_training = transforms.Compose([ToTensor(), Normalise(), ZeroPadding()])
-        data_transform_for_training = transforms.Compose([ToTensor(), ZeroPadding()])
-        data = LandmarkDataset(root_dir=settings.DATA_DIR, data_subset_type=settings.TRAIN_SUBSET,
-                               transform=data_transform_for_training)
-        self.train_data = data
-        self.valid_data = None
+        data_full = LandmarkDataset(root_dir=settings.DATA_DIR, data_subset_type=settings.TRAIN_SUBSET,
+                                    transform=self.transform)
+        # pdb.set_trace()
+        tmp_val_set_size = len(data_full) - settings.TRAIN_SET_SIZE
+        self.train_data, self.valid_data = random_split(data_full, [settings.TRAIN_SET_SIZE, tmp_val_set_size],
+                                                        generator=torch.Generator().manual_seed(0))
         self.test_data = None
 
     def train_dataloader(self):
@@ -120,12 +116,10 @@ class LandmarksDataModule(pl.LightningDataModule):
         # collate_fn=CollateFn)
 
     def val_dataloader(self):
-        return DataLoader(self.valid_data,
-                          batch_size=self.batch_size)
+        return DataLoader(self.valid_data, batch_size=self.batch_size, num_workers=4)
 
     def test_dataloader(self):
-        return DataLoader(self.test_data,
-                          batch_size=self.batch_size)
+        return DataLoader(self.test_data, batch_size=self.batch_size)
 
 
 def main():

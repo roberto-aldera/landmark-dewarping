@@ -33,6 +33,12 @@ class CMNet(pl.LightningModule):
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
+    def validation_step(self, batch, batch_nb):
+        x, y = batch['landmarks'], batch['cm_parameters']
+        loss = func.mse_loss(self.forward(x), y)
+        self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
 
