@@ -13,32 +13,37 @@ import pdb
 class LandmarkDataset:
     """Landmark dataset."""
 
-    def __init__(self, root_dir, data_subset_type, transform=None):
+    def __init__(self, root_dir, is_training_data=True, transform=None):
         """
         Args:
             root_dir (string): Directory with all the images.
-            data_subset_type (string): Specify if the required data is "training", "validation", or "test"
+            train (bool): Specify if the required data is for training/validation, or testing
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        self.root_dir = root_dir + data_subset_type + "/"
-        self.data_subset_type = data_subset_type
+        if is_training_data:
+            self.root_dir = root_dir + "training" + "/"
+        else:
+            self.root_dir = root_dir + "test" + "/"
+        self.is_training_data = is_training_data
         self.transform = transform
 
     def __len__(self):
-        subset_size = 0
-        if self.data_subset_type == settings.TRAIN_SUBSET:
-            subset_size = settings.TOTAL_SAMPLES  # settings.TRAIN_SET_SIZE
-        elif self.data_subset_type == settings.VAL_SUBSET:
-            subset_size = settings.VAL_SET_SIZE
-        elif self.data_subset_type == settings.TEST_SUBSET:
-            subset_size = settings.TEST_SET_SIZE
+        if self.is_training_data:
+            subset_size = settings.TOTAL_SAMPLES
+        else:
+            subset_size = 0
+            raise NotImplementedError
         return subset_size
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        landmark_file = self.root_dir + "matched_landmarks/" + self.data_subset_type + "_" + str(idx) + ".csv"
+        if self.is_training_data:
+            landmark_file = self.root_dir + "matched_landmarks/training_" + str(idx) + ".csv"
+        else:
+            landmark_file = self.root_dir + "matched_landmarks/test_" + str(idx) + ".csv"
+
         landmarks = pd.read_csv(landmark_file, header=None)
         all_cm_parameters = pd.read_csv(self.root_dir + "gt_poses.csv", header=None)
         # Get the cm parameters for this particular match set (just theta and curvature)
@@ -103,12 +108,9 @@ class LandmarksDataModule(pl.LightningDataModule):
     #     raise NotImplementedError
 
     def setup(self, stage=None):
-        data_full = LandmarkDataset(root_dir=settings.DATA_DIR, data_subset_type=settings.TRAIN_SUBSET,
+        data_full = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
                                     transform=self.transform)
-        # pdb.set_trace()
-        tmp_val_set_size = len(data_full) - settings.TRAIN_SET_SIZE
-        self.train_data, self.valid_data = random_split(data_full, [settings.TRAIN_SET_SIZE, tmp_val_set_size],
-                                                        generator=torch.Generator().manual_seed(0))
+        self.train_data, self.valid_data = random_split(data_full, [settings.TRAIN_SET_SIZE, settings.VAL_SET_SIZE])
         self.test_data = None
 
     def train_dataloader(self):
@@ -124,15 +126,20 @@ class LandmarksDataModule(pl.LightningDataModule):
 
 def main():
     # Define a main loop to run and show some example data if this script is run as main
-    landmark_dataset = LandmarkDataset(root_dir=settings.DATA_DIR, data_subset_type=settings.TRAIN_SUBSET,
-                                       transform=None)
-    sample_data = landmark_dataset[0]
+    data_full = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
+                                transform=None)
+    train_data, valid_data = random_split(data_full, [settings.TRAIN_SET_SIZE, settings.VAL_SET_SIZE],
+                                          generator=torch.Generator().manual_seed(
+                                              0))  # seed is already set in settings with pl.seed_everything(0)
+
+    print("Training dataset size:", len(train_data))
+    print("Training dataset size:", len(valid_data))
+
+    sample_data = train_data[0]
     landmarks = np.array(sample_data['landmarks'])
     cm_parameters = np.array(sample_data['cm_parameters'])
-
     print("Landmarks shape:", landmarks.shape)
     print("CM parameters shape:", cm_parameters.shape)
-    pdb.set_trace()
 
 
 if __name__ == "__main__":
