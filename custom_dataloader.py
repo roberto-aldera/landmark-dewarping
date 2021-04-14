@@ -117,6 +117,7 @@ class LandmarksDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True, num_workers=4)
+        # collate_fn=CollateFn)
 
     def val_dataloader(self):
         return DataLoader(self.valid_data,
