@@ -71,14 +71,25 @@ class ToTensor(object):
                 'cm_parameters': torch.tensor(cm_parameters.values)}
 
 
+class SubsetSampling(object):
+    """Apply random subset sampling to pick N matches"""
+
+    def __call__(self, sample):
+        landmarks, cm_parameters = sample['landmarks'], sample['cm_parameters']
+        if len(landmarks) > settings.K_MAX_MATCHES:
+            processed_landmarks = landmarks[torch.randperm(len(landmarks))[:settings.K_MAX_MATCHES]]
+        else:
+            processed_landmarks = landmarks
+        return {'landmarks': processed_landmarks,
+                'cm_parameters': cm_parameters}
+
+
 class ZeroPadding(object):
     """Apply padding to handle variable-length data."""
 
     def __call__(self, sample):
         landmarks, cm_parameters = sample['landmarks'], sample['cm_parameters']
-        # TODO: Later when we are shuffling, just sample K landmarks every time
-        k_expected_max_landmarks = 1200
-        pad_size = k_expected_max_landmarks - len(landmarks)
+        pad_size = settings.K_MAX_MATCHES - len(landmarks)
         padded_landmarks = func.pad(landmarks, pad=(0, 0, 0, pad_size))
         return {'landmarks': padded_landmarks,
                 'cm_parameters': cm_parameters}
@@ -102,7 +113,7 @@ class LandmarksDataModule(pl.LightningDataModule):
         super().__init__()
         self.root_dir = "/workspace/data/landmark-distortion/tmp_data_store/"
         self.batch_size = settings.BATCH_SIZE
-        self.transform = transforms.Compose([ToTensor(), ZeroPadding()])
+        self.transform = transforms.Compose([ToTensor(), SubsetSampling(), ZeroPadding()])
 
     # def prepare_data(self):
     #     raise NotImplementedError
@@ -126,8 +137,9 @@ class LandmarksDataModule(pl.LightningDataModule):
 
 def main():
     # Define a main loop to run and show some example data if this script is run as main
+    transform = transforms.Compose([ToTensor(), SubsetSampling(), ZeroPadding()])
     data_full = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
-                                transform=None)
+                                transform=transform)
     train_data, valid_data = random_split(data_full, [settings.TRAIN_SET_SIZE, settings.VAL_SET_SIZE],
                                           generator=torch.Generator().manual_seed(
                                               0))  # seed is already set in settings with pl.seed_everything(0)
@@ -140,6 +152,7 @@ def main():
     cm_parameters = np.array(sample_data['cm_parameters'])
     print("Landmarks shape:", landmarks.shape)
     print("CM parameters shape:", cm_parameters.shape)
+    pdb.set_trace()
 
 
 if __name__ == "__main__":

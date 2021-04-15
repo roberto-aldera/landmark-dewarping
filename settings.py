@@ -5,6 +5,8 @@ import numpy as np
 # Ensure reproducibility
 pl.seed_everything(0)
 
+K_MAX_MATCHES = 800
+
 # data subset names
 TRAIN_SUBSET = "training"
 VAL_SUBSET = "validation"
