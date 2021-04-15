@@ -96,16 +96,13 @@ class ZeroPadding(object):
 
 
 class Normalise(object):
-    """Perform normalisation."""
+    """Perform normalisation to scale landmark ranges to be between [-1, 1]."""
 
-    # TODO: implement this properly, it's not finished.
     def __call__(self, sample):
         landmarks, cm_parameters = sample['landmarks'], sample['cm_parameters']
-        mean = settings.LANDMARK_MEAN
-        std_dev = settings.LANDMARK_STD_DEV
-        scaled_cm_parameters = (cm_parameters - mean) / std_dev
-        return {'landmarks': landmarks,
-                'cm_parameters': scaled_cm_parameters}
+        scaled_landmarks = landmarks / settings.MAX_LANDMARK_RANGE_METRES
+        return {'landmarks': scaled_landmarks,
+                'cm_parameters': cm_parameters}
 
 
 class LandmarksDataModule(pl.LightningDataModule):
@@ -113,7 +110,7 @@ class LandmarksDataModule(pl.LightningDataModule):
         super().__init__()
         self.root_dir = "/workspace/data/landmark-distortion/tmp_data_store/"
         self.batch_size = settings.BATCH_SIZE
-        self.transform = transforms.Compose([ToTensor(), SubsetSampling(), ZeroPadding()])
+        self.transform = transforms.Compose([ToTensor(), Normalise(), SubsetSampling(), ZeroPadding()])
 
     # def prepare_data(self):
     #     raise NotImplementedError
@@ -137,7 +134,7 @@ class LandmarksDataModule(pl.LightningDataModule):
 
 def main():
     # Define a main loop to run and show some example data if this script is run as main
-    transform = transforms.Compose([ToTensor(), SubsetSampling(), ZeroPadding()])
+    transform = transforms.Compose([ToTensor(), Normalise(), SubsetSampling(), ZeroPadding()])
     data_full = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
                                 transform=transform)
     train_data, valid_data = random_split(data_full, [settings.TRAIN_SET_SIZE, settings.VAL_SET_SIZE],

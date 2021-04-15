@@ -6,6 +6,7 @@ import numpy as np
 pl.seed_everything(0)
 
 K_MAX_MATCHES = 800
+MAX_LANDMARK_RANGE_METRES = 165  # 3768 bins at a resolution of 0.0438 cm per bin
 
 # data subset names
 TRAIN_SUBSET = "training"
@@ -18,8 +19,6 @@ TRAIN_RATIO = 0.8
 TRAIN_SET_SIZE = int(TOTAL_SAMPLES * TRAIN_RATIO)
 VAL_SET_SIZE = TOTAL_SAMPLES - TRAIN_SET_SIZE
 # TEST_SET_SIZE = TOTAL_SAMPLES - (TRAIN_SET_SIZE + VAL_SET_SIZE)
-LANDMARK_MEAN = 0
-LANDMARK_STD_DEV = 1
 
 # Models
 ARCHITECTURE_TYPE = "cmnet"
