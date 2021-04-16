@@ -38,6 +38,6 @@ if IS_RUNNING_ON_SERVER is True:
     RESULTS_DIR = ROOT_DIR + "evaluation/"
 else:
     ROOT_DIR = "/workspace/data/landmark-dewarping/"
-    DATA_DIR = ROOT_DIR + "tmp_data_store/"
+    DATA_DIR = ROOT_DIR + "landmark-data/"
     MODEL_DIR = ROOT_DIR + "models/"
     RESULTS_DIR = ROOT_DIR + "evaluation/"

@@ -108,7 +108,7 @@ class Normalise(object):
 class LandmarksDataModule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
-        self.root_dir = "/workspace/data/landmark-distortion/tmp_data_store/"
+        self.root_dir = settings.DATA_DIR
         self.batch_size = settings.BATCH_SIZE
         self.transform = transforms.Compose([ToTensor(), Normalise(), SubsetSampling(), ZeroPadding()])
 
