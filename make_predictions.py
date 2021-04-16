@@ -18,19 +18,14 @@ from get_cme_parameters_from_gt import save_timestamps_and_cme_to_csv, MotionEst
 
 def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=True):
     cm_predictions = []
-
-    # for data in tqdm(dl):
-    #     landmarks, cm_parameters = data['landmarks'], data['cm_parameters']
-    #     cm_predictions.append(model(landmarks).detach().numpy())
-
-    # A quick check
-    num_samples = 300
+    num_samples = len(data_loader.dataset)  # settings.TOTAL_SAMPLES
     for i in tqdm(range(num_samples)):
         landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
         cm_predictions.append(model(landmarks).detach().numpy().squeeze(0))
+        # cm_predictions.append(data_loader.dataset[i]['cm_parameters'])  # these are the gt readings
 
     motion_estimates = []
-    for idx in tqdm(range(len(cm_predictions))):
+    for idx in range(len(cm_predictions)):
         th_estimate = np.array(cm_predictions[idx][0])
         curvature_estimate = np.array(cm_predictions[idx][1])
         if curvature_estimate == 0:
@@ -88,7 +83,6 @@ def do_quick_plot_from_csv_files(gt_csv_file, pred_csv_file):
 
 if __name__ == "__main__":
     Path(settings.RESULTS_DIR).mkdir(parents=True, exist_ok=True)
-    Path(settings.MODEL_DIR).mkdir(parents=True, exist_ok=True)
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--model_name', type=str, default=settings.ARCHITECTURE_TYPE, help='cmnet or...')
 
@@ -98,9 +92,9 @@ if __name__ == "__main__":
 
     # Prepare model for evaluation
     path_to_model = "%s%s%s" % (settings.MODEL_DIR, params.model_name, ".ckpt")
-    model = CMNet(params)
-    model = model.load_from_checkpoint(path_to_model)
+    model = CMNet.load_from_checkpoint(path_to_model)
     model.eval()
+    print("Loaded model from:", path_to_model)
 
     # Load data to evaluate over (just training data for now)
     transform = transforms.Compose([ToTensor(), Normalise(), SubsetSampling(), ZeroPadding()])
@@ -109,13 +103,6 @@ if __name__ == "__main__":
     data_loader = DataLoader(dataset, batch_size=1,  # not sure if batch size here needs to be only 1
                              shuffle=False, num_workers=4)
 
-    # Using a datamodule
-    # dm = LandmarksDataModule()
-    # dm.setup()
-    # dl = dm.train_dataloader()
-    # pdb.set_trace()
-    # cm_predictions = []
-    # do_csv_export = True
     do_prediction_and_optionally_export_csv(model, data_loader)
     do_quick_plot_from_csv_files(gt_csv_file="/workspace/data/landmark-dewarping/landmark-data/training/gt_poses.csv",
                                  pred_csv_file="/workspace/data/landmark-dewarping/evaluation/cm-pred_poses.csv")

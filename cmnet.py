@@ -18,7 +18,6 @@ class CMNet(pl.LightningModule):
         self.hparams = hparams
         self.cme = CircularMotionEstimationBase()
         self.fc1 = torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 4, out_features=settings.K_MAX_MATCHES * 2)
-        # self.loss = None  # probably an L1 but do this later
 
     def forward(self, x):
         b, n, c = x.shape
