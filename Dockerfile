@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:1.6.0-cuda10.1-cudnn7-runtime
+FROM pytorch/pytorch:1.8.1-cuda11.1-cudnn8-runtime
 
 RUN pip install pytorch_lightning \
 				pandas \

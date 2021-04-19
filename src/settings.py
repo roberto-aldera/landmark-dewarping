@@ -30,10 +30,11 @@ LEARNING_RATE = 1e-4
 BATCH_SIZE = 32
 
 # Paths
-IS_RUNNING_ON_SERVER = False
+IS_RUNNING_ON_SERVER = True
 
 if IS_RUNNING_ON_SERVER is True:
-    ROOT_DIR = "/Volumes/scratchdata/roberto/place-to-store-things/"
+    ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"
+    DATA_DIR = "/workspace/landmark-data/"
     MODEL_DIR = ROOT_DIR + "models/"
     RESULTS_DIR = ROOT_DIR + "evaluation/"
 else:
