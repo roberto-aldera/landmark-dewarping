@@ -1,15 +1,22 @@
 import numpy as np
 import torch
 import pdb
+from dataclasses import dataclass
 import csv
-import sys
 from tqdm import tqdm
 import settings
-from custom_dataloader import LandmarksDataModule
+from torch.utils.data import DataLoader
+from custom_dataloader import LandmarkDataset, ToTensor, Normalise, SubsetSampling, ZeroPadding
+from torchvision import transforms
 
-sys.path.insert(-1, "/workspace/code/landmark-distortion")
-from R_and_theta_utilities import get_transform_by_r_and_theta
-from get_cme_parameters_from_gt import save_timestamps_and_cme_to_csv, MotionEstimate
+
+@dataclass
+class MotionEstimate:
+    theta: float
+    curvature: float
+    dx: float
+    dy: float
+    dth: float
 
 
 class CircularMotionEstimationBase(torch.nn.Module):
@@ -75,6 +82,43 @@ class CircularMotionEstimationBase(torch.nn.Module):
         # return theta_estimate, curvature_estimate
 
 
+def get_transform_by_translation_and_theta(translation_x, translation_y, theta):
+    T_offset = np.array([[translation_x], [translation_y]])
+    pose = np.identity(4)
+    pose[0, 0] = np.cos(theta)
+    pose[0, 1] = -np.sin(theta)
+    pose[1, 0] = np.sin(theta)
+    pose[1, 1] = np.cos(theta)
+    pose[0, 3] = T_offset[0]
+    pose[1, 3] = T_offset[1]
+    return pose
+
+
+def get_transform_by_r_and_theta(rotation_radius, theta):
+    phi = theta / 2  # this is because we're enforcing circular motion
+    if rotation_radius == np.inf and theta == 0:
+        rho = 0
+    else:
+        rho = 2 * rotation_radius * np.sin(phi)
+    rho_x = rho * np.cos(phi)  # forward motion
+    rho_y = rho * np.sin(phi)  # lateral motion
+    return get_transform_by_translation_and_theta(rho_x, rho_y, theta)
+
+
+def save_timestamps_and_cme_to_csv(timestamps, motion_estimates, pose_source, export_folder):
+    # Save poses with format: timestamp, theta, curvature, dx, dy, dth
+    with open("%s%s%s" % (export_folder, pose_source, "_poses.csv"), 'w') as poses_file:
+        wr = csv.writer(poses_file, delimiter=",")
+        th_values = [item.dth for item in motion_estimates]
+        curvature_values = [item.curvature for item in motion_estimates]
+        x_values = [item.dx for item in motion_estimates]
+        y_values = [item.dy for item in motion_estimates]
+        for idx in range(len(timestamps)):
+            timestamp_and_motion_estimate = [timestamps[idx], th_values[idx], curvature_values[idx], x_values[idx],
+                                             y_values[idx], th_values[idx]]
+            wr.writerow(timestamp_and_motion_estimate)
+
+
 def get_data_from_csv(csv_file):
     with open(csv_file, newline='') as f:
         reader = csv.reader(f)
@@ -113,22 +157,24 @@ def do_quick_plot_from_csv_files(gt_csv_file, est_csv_file):
 
 
 def check_cm_pipeline_and_optionally_export_csv(do_csv_export=False):
-    dm = LandmarksDataModule()
-    dm.setup()
     cm_estimator = CircularMotionEstimationBase()
-    dl = dm.train_dataloader()
+    transform = transforms.Compose([ToTensor(), SubsetSampling(), ZeroPadding()])
+    dataset = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
+                              transform=transform)
+    data_loader = DataLoader(dataset, batch_size=1,  # not sure if batch size here needs to be only 1
+                             shuffle=False, num_workers=4)
 
     cm_estimates = []
 
-    for data in tqdm(dl):
+    for data in tqdm(data_loader):
         landmarks, cm_parameters = data['landmarks'], data['cm_parameters']
         cm_estimates.append(cm_estimator(landmarks))
 
     # Assuming batch size = 1 for this checking section...
     motion_estimates = []
     for idx in range(len(cm_estimates)):
-        th_estimate = np.array(cm_estimates[idx][0])
-        curvature_estimate = np.array(cm_estimates[idx][1])
+        th_estimate = np.array(cm_estimates[idx].detach().numpy().squeeze(0)[0])
+        curvature_estimate = np.array(cm_estimates[idx].detach().numpy().squeeze(0)[1])
         if curvature_estimate == 0:
             r_estimate = np.inf
         else:
@@ -139,7 +185,8 @@ def check_cm_pipeline_and_optionally_export_csv(do_csv_export=False):
         y_est = se3_from_r_theta[1, 3]
         th_est = np.arctan2(se3_from_r_theta[1, 0], se3_from_r_theta[0, 0])
         motion_estimates.append(
-            MotionEstimate(theta=th_estimate, curvature=curvature_estimate, dx=x_est, dy=y_est, dth=th_est))
+            MotionEstimate(theta=th_estimate.item(), curvature=curvature_estimate.item(), dx=x_est, dy=y_est,
+                           dth=th_est))
     if do_csv_export:
         save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(cm_estimates)), motion_estimates=motion_estimates,
                                        pose_source="cm-est", export_folder=settings.RESULTS_DIR)
@@ -149,5 +196,5 @@ if __name__ == "__main__":
     print("Running circular motion function script...")
     check_cm_pipeline_and_optionally_export_csv(do_csv_export=True)
 
-    do_quick_plot_from_csv_files(gt_csv_file="/workspace/data/landmark-dewarping/tmp_data_store/training/gt_poses.csv",
+    do_quick_plot_from_csv_files(gt_csv_file="/workspace/data/landmark-dewarping/landmark-data/training/gt_poses.csv",
                                  est_csv_file="/workspace/data/landmark-dewarping/evaluation/cm-est_poses.csv")

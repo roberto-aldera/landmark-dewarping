@@ -4,16 +4,12 @@ from cmnet import CMNet
 from torchvision import transforms
 from torch.utils.data import random_split, DataLoader
 from custom_dataloader import LandmarksDataModule, LandmarkDataset, ToTensor, Normalise, SubsetSampling, ZeroPadding
+from circular_motion_functions import get_transform_by_r_and_theta, save_timestamps_and_cme_to_csv, MotionEstimate
 from tqdm import tqdm
 import numpy as np
-import sys
 import settings
 import pdb
 import csv
-
-sys.path.insert(-1, "/workspace/code/landmark-distortion")
-from R_and_theta_utilities import get_transform_by_r_and_theta
-from get_cme_parameters_from_gt import save_timestamps_and_cme_to_csv, MotionEstimate
 
 
 def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=True):
