@@ -1,0 +1,1 @@
+python src/train.py --model_name="cmnet" --max_num_epochs 50 --batch_size 32 --gpus 1
