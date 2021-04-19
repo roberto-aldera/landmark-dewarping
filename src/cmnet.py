@@ -31,13 +31,13 @@ class CMNet(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        loss = func.mse_loss(self.forward(x), y)
+        loss = func.mse_loss(self.forward(x).to(self.device), y)
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        loss = func.mse_loss(self.forward(x), y)
+        loss = func.mse_loss(self.forward(x).to(self.device), y)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
