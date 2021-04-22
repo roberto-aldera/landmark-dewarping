@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from pathlib import Path
+import matplotlib.pyplot as plt
 from cmnet import CMNet
 from torchvision import transforms
 from torch.utils.data import random_split, DataLoader
@@ -12,13 +13,44 @@ import pdb
 import csv
 
 
+def debugging_with_plots(model, data_loader):
+    gt_cm = []
+    cm_predictions = []
+    num_samples = len(data_loader.dataset)
+    for i in tqdm(range(num_samples)):
+        landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
+        cm_predictions.append(model(landmarks).detach().numpy().squeeze(0))
+        gt_cm.append(data_loader.dataset[i]['cm_parameters'])
+
+    # Plot the landmarks from the match (the second set will have had the corrections applied at this point)
+    plt.figure(figsize=(10, 10))
+    plt.grid()
+    plt.plot(np.array(landmarks[0, :, 0]), np.array(landmarks[0, :, 2]), ',')
+    plt.plot(np.array(landmarks[0, :, 1]), np.array(landmarks[0, :, 3]), ',')
+    plt.gca().set_aspect('equal', adjustable='box')
+    plt.savefig("%s%s" % (settings.RESULTS_DIR, "landmarks.pdf"))
+    plt.close()
+    print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "landmarks.pdf"))
+
+    # Plot thetas and the predicted thetas
+    gt_thetas = [item[0] for item in gt_cm]
+    pred_thetas = [item[0] for item in cm_predictions]
+
+    plt.figure(figsize=(15, 5))
+    plt.grid()
+    plt.plot(gt_thetas, '+')
+    plt.plot(pred_thetas, '.')
+    plt.savefig("%s%s" % (settings.RESULTS_DIR, "thetas.pdf"))
+    plt.close()
+    print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "thetas.pdf"))
+
+
 def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=True):
     cm_predictions = []
     num_samples = len(data_loader.dataset)  # settings.TOTAL_SAMPLES
     for i in tqdm(range(num_samples)):
         landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
         cm_predictions.append(model(landmarks).detach().numpy().squeeze(0))
-        # cm_predictions.append(data_loader.dataset[i]['cm_parameters'])  # these are the gt readings
 
     motion_estimates = []
     for idx in range(len(cm_predictions)):
@@ -53,8 +85,6 @@ def get_data_from_csv(csv_file):
 
 
 def do_quick_plot_from_csv_files(gt_csv_file, pred_csv_file):
-    import matplotlib.pyplot as plt
-
     # Read in CSVs for comparison
     gt_x_y_th = get_data_from_csv(gt_csv_file)
     pred_x_y_th = get_data_from_csv(pred_csv_file)
@@ -73,8 +103,9 @@ def do_quick_plot_from_csv_files(gt_csv_file, pred_csv_file):
     plt.xlabel("Sample index")
     plt.ylabel("units/sample")
     plt.legend()
-    plt.savefig("%s%s" % (settings.RESULTS_DIR, "/pose_predictions_comparison.pdf"))
+    plt.savefig("%s%s" % (settings.RESULTS_DIR, "pose_predictions_comparison.pdf"))
     plt.close()
+    print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "pose_predictions_comparison.pdf"))
 
 
 if __name__ == "__main__":
@@ -88,7 +119,10 @@ if __name__ == "__main__":
 
     # Prepare model for evaluation
     path_to_model = "%s%s%s" % (settings.MODEL_DIR, params.model_name, ".ckpt")
-    model = CMNet.load_from_checkpoint(path_to_model)
+    # path_to_model = "/workspace/data/scratchdata/landmark-dewarping/models/cmnet.ckpt"
+
+    model = CMNet(params)
+    model = model.load_from_checkpoint(path_to_model)
     model.eval()
     print("Loaded model from:", path_to_model)
 
@@ -97,8 +131,9 @@ if __name__ == "__main__":
     dataset = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
                               transform=transform)
     data_loader = DataLoader(dataset, batch_size=1,  # not sure if batch size here needs to be only 1
-                             shuffle=False, num_workers=4)
+                             shuffle=False, num_workers=1)
 
+    # debugging_with_plots(model, data_loader)
     do_prediction_and_optionally_export_csv(model, data_loader)
     do_quick_plot_from_csv_files(gt_csv_file="/workspace/data/landmark-dewarping/landmark-data/training/gt_poses.csv",
                                  pred_csv_file="/workspace/data/landmark-dewarping/evaluation/cm-pred_poses.csv")
