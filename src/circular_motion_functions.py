@@ -75,11 +75,31 @@ class CircularMotionEstimationBase(torch.nn.Module):
         return torch.tensor(theta_estimates, requires_grad=True).view(thetas.shape[0], -1), \
                torch.tensor(curvature_estimates, requires_grad=True).view(thetas.shape[0], -1)
 
-        # # Might replace this going forward and use the mask (or some sort of weighted score) to pick theta
-        # theta_estimate, median_indices = torch.median(thetas, dim=1)
-        # # Pick the curvature that corresponds to the median theta in each batch
-        # curvature_estimate = torch.gather(curvatures, 1, median_indices.unsqueeze(2))
-        # return theta_estimate, curvature_estimate
+    def select_theta_and_curvature_with_iqr(self, thetas, curvatures, validity_mask):
+        theta_estimates, curvature_estimates = [], []
+        for batch_idx in range(thetas.shape[0]):
+            # Mask out the padding
+            valid_thetas = torch.tensor(
+                [item for idx, item in enumerate(thetas[batch_idx, :]) if validity_mask[batch_idx, idx] == 1])
+            valid_curvatures = torch.tensor(
+                [item for idx, item in enumerate(curvatures[batch_idx, :]) if validity_mask[batch_idx, idx] == 1])
+            # Might replace this going forward and use the mask (or some sort of weighted score) to pick theta
+            # Find quantiles
+            quantiles = torch.tensor([0.25, 0.75])
+            theta_quantiles = torch.quantile(valid_thetas, quantiles.double())
+            iqr_thetas_indices = ((valid_thetas >= theta_quantiles[0]) & (valid_thetas <= theta_quantiles[1])).nonzero()
+            iqr_thetas = valid_thetas[(valid_thetas >= theta_quantiles[0]) & (valid_thetas <= theta_quantiles[1])]
+            # Find the median in this IQR
+            _, iqr_median_index = torch.median(iqr_thetas, dim=0)
+
+            # Find the index in the bigger set corresponding to this median index
+            median_index = iqr_thetas_indices[iqr_median_index]
+            theta_estimate = valid_thetas[median_index]
+            curvature_estimate = valid_curvatures[median_index]
+            theta_estimates.append(theta_estimate)
+            curvature_estimates.append(curvature_estimate)
+        return torch.tensor(theta_estimates, requires_grad=True).view(thetas.shape[0], -1), \
+               torch.tensor(curvature_estimates, requires_grad=True).view(thetas.shape[0], -1)
 
 
 def get_transform_by_translation_and_theta(translation_x, translation_y, theta):
