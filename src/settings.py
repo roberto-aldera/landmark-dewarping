@@ -8,11 +8,6 @@ pl.seed_everything(0)
 K_MAX_MATCHES = 800
 MAX_LANDMARK_RANGE_METRES = 165  # 3768 bins at a resolution of 0.0438 cm per bin
 
-# data subset names
-TRAIN_SUBSET = "training"
-VAL_SUBSET = "validation"
-TEST_SUBSET = "test"
-
 # General dataset parameters
 TOTAL_SAMPLES = 150
 TRAIN_RATIO = 0.8
@@ -30,7 +25,7 @@ LEARNING_RATE = 1e-4
 BATCH_SIZE = 32
 
 # Paths
-IS_RUNNING_ON_SERVER = True
+IS_RUNNING_ON_SERVER = False
 
 if IS_RUNNING_ON_SERVER is True:
     ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"

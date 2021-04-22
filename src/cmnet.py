@@ -3,9 +3,6 @@ import settings
 import torch
 import pytorch_lightning as pl
 import pdb
-from torchvision import datasets, transforms
-from torch.utils.data import random_split, DataLoader
-from custom_dataloader import LandmarkDataset, CollateFn, ToTensor, Normalise, ZeroPadding
 from circular_motion_functions import CircularMotionEstimationBase
 from custom_dataloader import LandmarksDataModule
 from argparse import ArgumentParser
@@ -17,14 +14,44 @@ class CMNet(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.cme = CircularMotionEstimationBase()
-        self.fc1 = torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 4, out_features=settings.K_MAX_MATCHES * 2)
+        self.fc1 = torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 4, out_features=settings.K_MAX_MATCHES * 6)
+        self.fc2 = torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 6, out_features=settings.K_MAX_MATCHES * 4)
+        self.fc3 = torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 4, out_features=settings.K_MAX_MATCHES * 2)
 
     def forward(self, x):
         b, n, c = x.shape
-        predictions = self.fc1(x.float().flatten(1)).view(b, n, 2)  # only predicting corrections on x2 and y2 positions
-        padded_predictions = func.pad(predictions, pad=(0, 2, 0, 0))
-        x = x + padded_predictions
-        # Scale landmark positions back up to metres (after being between [-1, -1] for predictions)
+        predictions = self.fc1(x.float().flatten(1))
+        predictions = func.relu(self.fc2(predictions))
+        predictions = self.fc3(predictions).view(b, n, 2)
+
+        # Apply predictions to latest landmark set (leaving previous landmarks unaltered)
+        prediction_set = torch.zeros(b, n, c)
+        prediction_set[:, :, 1] = predictions[:, :, 0]
+        prediction_set[:, :, 3] = predictions[:, :, 1]
+
+        vanilla_x = torch.tensor(x)
+        # pdb.set_trace()
+        mask = x != 0  # get mask to recall which elements where zero-padded
+        prediction_set = prediction_set * mask  # ignore predicted corrections that were made on zero-padded entries
+        x = x.add(prediction_set)
+
+        # Quick check
+        # pdb.set_trace()
+        do_plot = False
+        if do_plot:
+            import matplotlib.pyplot as plt
+            import numpy as np
+            plt.figure(figsize=(10, 10))
+            plt.grid()
+            plt.plot(np.array(vanilla_x[0, :, 1].detach().numpy()), np.array(vanilla_x[0, :, 3].detach().numpy()), ',')
+            plt.plot(np.array(x[0, :, 1].detach().numpy()), np.array(x[0, :, 3].detach().numpy()), ',')
+            plt.gca().set_aspect('equal', adjustable='box')
+            plt.savefig("%s%s" % (settings.RESULTS_DIR, "landmarks-and-corrections.pdf"))
+            plt.close()
+            print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "landmarks-and-corrections.pdf"))
+            pdb.set_trace()
+
+        # Scale landmark positions back up to metres (after being between [-1, 1] for predictions)
         x = x * settings.MAX_LANDMARK_RANGE_METRES
 
         return self.cme(x)
