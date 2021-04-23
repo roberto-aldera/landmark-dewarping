@@ -1,4 +1,5 @@
 import torch.nn.functional as func
+from torch import nn
 import settings
 import torch
 import pytorch_lightning as pl
@@ -14,15 +15,14 @@ class CMNet(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.cme = CircularMotionEstimationBase()
-        self.fc1 = torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 4, out_features=settings.K_MAX_MATCHES * 6)
-        self.fc2 = torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 6, out_features=settings.K_MAX_MATCHES * 4)
-        self.fc3 = torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 4, out_features=settings.K_MAX_MATCHES * 2)
+        self.fc1 = nn.Linear(in_features=settings.K_MAX_MATCHES * 4, out_features=settings.K_MAX_MATCHES * 6)
+        self.fc2 = nn.Linear(in_features=settings.K_MAX_MATCHES * 6, out_features=settings.K_MAX_MATCHES * 4)
+        self.fc3 = nn.Linear(in_features=settings.K_MAX_MATCHES * 4, out_features=settings.K_MAX_MATCHES * 2)
+        self.net = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, self.fc3, nn.Tanh())
 
     def forward(self, x):
         b, n, c = x.shape
-        predictions = self.fc1(x.float().flatten(1))
-        predictions = func.relu(self.fc2(predictions))
-        predictions = self.fc3(predictions).view(b, n, 2)
+        predictions = self.net(x.float().flatten(1)).view(b, n, 2)
 
         # Apply predictions to latest landmark set (leaving previous landmarks unaltered)
         prediction_set = torch.zeros(b, n, c)
@@ -36,7 +36,6 @@ class CMNet(pl.LightningModule):
         x = x.add(prediction_set)
 
         # Quick check
-        # pdb.set_trace()
         do_plot = False
         if do_plot:
             import matplotlib.pyplot as plt
