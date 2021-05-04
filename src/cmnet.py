@@ -23,14 +23,18 @@ class CMNet(pl.LightningModule):
     def forward(self, x):
         b, n, c = x.shape
         predictions = self.net(x.float().flatten(1)).view(b, n, 2)
+        # TODO -> predictions are all nan after a few iterations. Try using self.net[0].weight to see.
+        # It's likely something to do with zero padding not being handled properly.
 
         # Apply predictions to latest landmark set (leaving previous landmarks unaltered)
         prediction_set = torch.zeros(b, n, c)
         prediction_set[:, :, 1] = predictions[:, :, 0]
         prediction_set[:, :, 3] = predictions[:, :, 1]
 
+        prediction_set = torch.nan_to_num(prediction_set)  # hacky mcHackface
+
         vanilla_x = torch.tensor(x)
-        # pdb.set_trace()
+
         mask = x != 0  # get mask to recall which elements where zero-padded
         prediction_set = prediction_set * mask  # ignore predicted corrections that were made on zero-padded entries
         x = x.add(prediction_set)
@@ -51,20 +55,37 @@ class CMNet(pl.LightningModule):
             pdb.set_trace()
 
         # Scale landmark positions back up to metres (after being between [-1, 1] for predictions)
-        x = x * settings.MAX_LANDMARK_RANGE_METRES
+        # x = x * settings.MAX_LANDMARK_RANGE_METRES
 
         return self.cme(x)
 
     def training_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        loss = func.mse_loss(self.forward(x).to(self.device), y)
-        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        b, n, c = x.shape
+        y = torch.tile(y.unsqueeze(1), (1, n, 1))
+
+        prediction = self.forward(x).to(self.device)
+        differences = y - prediction
+        # filtered_tensor = differences[~torch.any(differences.isnan(), dim=2)]
+        filtered_tensor = torch.nan_to_num(differences)
+        loss = func.mse_loss(filtered_tensor, torch.zeros_like(filtered_tensor))
+        # loss = func.mse_loss(self.forward(x).to(self.device), y)
+        self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        loss = func.mse_loss(self.forward(x).to(self.device), y)
-        self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        b, n, c = x.shape
+        y = torch.tile(y.unsqueeze(1), (1, n, 1))
+
+        prediction = self.forward(x).to(self.device)
+        differences = y - prediction
+        # filtered_tensor = differences[~torch.any(differences.isnan(), dim=2)]
+        filtered_tensor = torch.nan_to_num(differences)
+        loss = func.mse_loss(filtered_tensor, torch.zeros_like(filtered_tensor))
+        # Now need to find 'difference' between predictions and y, considering only elements where mask is valid
+        # loss = func.mse_loss(prediction, y)
+        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):

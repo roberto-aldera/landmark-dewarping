@@ -26,10 +26,13 @@ class CircularMotionEstimationBase(torch.nn.Module):
         ranges, bearings, validity_mask = self.get_ranges_and_bearings_from_cartesian(x)
         # get theta, curvature for each range, bearing pair
         thetas, curvatures = self.get_thetas_and_curvatures_from_ranges_and_bearings(ranges, bearings)
-        # pick theta (and its curvature) based on some heuristic (median)
-        theta_estimate, curvature_estimate = self.select_theta_and_curvature(thetas, curvatures, validity_mask)
         # pdb.set_trace()
-        return torch.cat([theta_estimate, curvature_estimate], dim=1)  # dimensions here still TBD
+        # pick theta (and its curvature) based on some heuristic (median)
+        # theta_estimate, curvature_estimate = self.select_theta_and_curvature(thetas, curvatures, validity_mask)
+        # pdb.set_trace()
+        # return torch.cat([theta_estimate, curvature_estimate], dim=1)  # dimensions here still TBD
+        # TODO -> returning all thetas and curvatures breaks things that are expecting single values
+        return torch.cat([thetas, curvatures], dim=2)  # dimensions here still TBD
 
     def get_ranges_and_bearings_from_cartesian(self, x):
         validity_mask = torch.zeros(x.shape[0:2])

@@ -8,6 +8,7 @@ from custom_dataloader import LandmarksDataModule, LandmarkDataset, ToTensor, No
 from circular_motion_functions import get_transform_by_r_and_theta, save_timestamps_and_cme_to_csv, MotionEstimate
 from tqdm import tqdm
 import numpy as np
+import torch
 import settings
 import pdb
 import csv
@@ -50,7 +51,16 @@ def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=Tr
     num_samples = len(data_loader.dataset)  # settings.TOTAL_SAMPLES
     for i in tqdm(range(num_samples)):
         landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
-        cm_predictions.append(model(landmarks).detach().numpy().squeeze(0))
+        # pdb.set_trace()
+        prediction = model(landmarks).detach().squeeze(0)
+        valid_predictions = prediction[~torch.any(prediction.isnan(), dim=1)]
+        valid_thetas = valid_predictions[:, 0]
+        # pdb.set_trace()
+        theta_estimate, median_index = torch.median(valid_thetas, dim=0)
+        curvature_estimate = valid_predictions[median_index, 1]
+        best_cm_prediction = [theta_estimate, curvature_estimate]
+        cm_predictions.append(best_cm_prediction)
+        # cm_predictions.append(model(landmarks).detach().numpy().squeeze(0))
 
     motion_estimates = []
     for idx in range(len(cm_predictions)):

@@ -89,7 +89,7 @@ class ZeroPadding(object):
 
     def __call__(self, sample):
         landmarks, cm_parameters = sample['landmarks'], sample['cm_parameters']
-        pad_size = settings.K_MAX_MATCHES - len(landmarks)
+        pad_size = max(settings.K_MAX_MATCHES - len(landmarks), 0)
         padded_landmarks = func.pad(landmarks, pad=(0, 0, 0, pad_size))
         return {'landmarks': padded_landmarks,
                 'cm_parameters': cm_parameters}
