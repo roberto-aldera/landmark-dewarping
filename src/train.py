@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 import time
 from cmnet import CMNet
+from pointnet import PointNet
 from custom_dataloader import LandmarksDataModule
 import settings
 
@@ -14,20 +15,20 @@ if __name__ == '__main__':
     parser = ArgumentParser(add_help=False)
     parser = pl.Trainer.add_argparse_args(parser)
 
-    parser.add_argument("--model_name", type=str, default="cmnet", help="cmnet or ...")
+    parser.add_argument("--model_name", type=str, default="pointnet")
     # parser.add_argument('--num_samples_to_evaluate', type=int, default=50, help="...")
 
     temp_args, _ = parser.parse_known_args()
     # let the model add what it wants
-    if temp_args.model_name == "cmnet":
-        parser = CMNet.add_model_specific_args(parser)
+    if temp_args.model_name == "pointnet":
+        parser = PointNet.add_model_specific_args(parser)
 
     params = parser.parse_args()
 
     # pick model
     model = None
-    if params.model_name == "cmnet":
-        model = CMNet(params)
+    if params.model_name == "pointnet":
+        model = PointNet(params)
 
     trainer = pl.Trainer.from_argparse_args(params,
                                             default_root_dir=settings.MODEL_DIR,

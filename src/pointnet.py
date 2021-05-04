@@ -8,6 +8,13 @@ import torch.utils.data
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+import pytorch_lightning as pl
+import settings
+from circular_motion_functions import CircularMotionEstimationBase
+from custom_dataloader import LandmarksDataModule
+from argparse import ArgumentParser
+import pdb
+
 
 class STNkd(nn.Module):
     def __init__(self, k=64):
@@ -135,10 +142,10 @@ class PointNetEncoder(nn.Module):
             return torch.cat([x, pointfeat], 1), trans, trans_feat
 
 
-class PointNet(nn.Module):
-    def __init__(self, num_class):
+class PointNet(pl.LightningModule):
+    def __init__(self, hparams):
         super(PointNet, self).__init__()
-        self.k = num_class
+        self.k = 2  # correction to x and y, will add a mask as 3rd dim later
         self.feat = PointNetEncoder(global_feat=False, feature_transform=True, channel=4)
         self.conv1 = torch.nn.Conv1d(1088, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
@@ -148,26 +155,81 @@ class PointNet(nn.Module):
         self.bn2 = nn.BatchNorm1d(256)
         self.bn3 = nn.BatchNorm1d(128)
 
+        self.cme = CircularMotionEstimationBase()
+
     def forward(self, x):
-        batchsize = x.size()[0]
-        n_pts = x.size()[2]
+        b, c, n = x.shape
+        landmark_positions = torch.Tensor(x)
         x, trans, trans_feat = self.feat(x)
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
         x = self.conv4(x)
         x = x.transpose(2, 1).contiguous()
-        # x = F.log_softmax(x.view(-1,self.k), dim=-1)
-        x = x.view(batchsize, n_pts, self.k)
+        x = x.view(b, n, self.k)
         # add tanh
-        return x, trans_feat
+
+        prediction_set = torch.zeros(b, n, c)
+        prediction_set[:, :, 1] = x[:, :, 0]
+        prediction_set[:, :, 3] = x[:, :, 1]
+
+        landmark_positions = landmark_positions.view(b, n, c)
+        corrected_landmark_positions = landmark_positions.add(prediction_set)
+
+        return self.cme(corrected_landmark_positions)
+
+    def training_step(self, batch, batch_nb):
+        x, y = batch['landmarks'], batch['cm_parameters']
+        b, n, c = x.shape
+        y = torch.tile(y.unsqueeze(1), (1, n, 1))
+
+        prediction = self.forward(x).to(self.device)
+        differences = y - prediction
+        loss = F.mse_loss(differences, torch.zeros_like(differences))
+        # loss = func.mse_loss(self.forward(x).to(self.device), y)
+        self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_nb):
+        x, y = batch['landmarks'], batch['cm_parameters']
+        b, n, c = x.shape
+        y = torch.tile(y.unsqueeze(1), (1, n, 1))
+
+        prediction = self.forward(x).to(self.device)
+        differences = y - prediction
+        loss = F.mse_loss(differences, torch.zeros_like(differences))
+        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+        return loss
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        """
+        Specify the hyperparams for this LightningModule
+        """
+        parent_parser.default_root_dir = settings.MODEL_DIR
+
+        # MODEL specific
+        parser = ArgumentParser(parents=[parent_parser], add_help=False)
+        parser.add_argument('--learning_rate', default=settings.LEARNING_RATE, type=float)
+        parser.add_argument('--batch_size', default=settings.BATCH_SIZE, type=int)
+        parser.add_argument('--dropout', default=0, type=float)
+
+        # training specific (for this model)
+        parser.add_argument('--max_num_epochs', default=settings.MAX_EPOCHS, type=int)
+
+        return parser
 
 
 if __name__ == "__main__":
-    x = torch.rand((32, 4, 600))
+    x = torch.rand((32, 4, 601))
     y = torch.rand((32, 4, 432))
     z = torch.rand((32, 4, 986))
-    emb_nn = PointNet(3)
-    print(emb_nn(x)[0].shape)  # torch.Size([32, 3, 600])
-    print(emb_nn(y)[0].shape)  # torch.Size([32, 3, 432])
-    print(emb_nn(z)[0].shape)  # torch.Size([32, 3, 986])
+    hparams = None
+    emb_nn = PointNet(hparams)
+    pdb.set_trace()
+    print(emb_nn(x).shape)  # torch.Size([32, 601, 2])
+    print(emb_nn(y).shape)  # torch.Size([32, 432, 2])
+    print(emb_nn(z).shape)  # torch.Size([32, 986, 2])

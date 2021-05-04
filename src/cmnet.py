@@ -35,7 +35,7 @@ class CMNet(pl.LightningModule):
 
         vanilla_x = torch.tensor(x)
 
-        mask = x != 0  # get mask to recall which elements where zero-padded
+        mask = x != 0  # get mask to recall which elements were zero-padded
         prediction_set = prediction_set * mask  # ignore predicted corrections that were made on zero-padded entries
         x = x.add(prediction_set)
 
