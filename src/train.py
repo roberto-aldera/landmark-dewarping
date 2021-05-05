@@ -2,9 +2,8 @@ import pytorch_lightning as pl
 from argparse import ArgumentParser
 from pathlib import Path
 import time
-from cmnet import CMNet
 from pointnet import PointNet
-from custom_dataloader import LandmarksDataModule
+from pointnet_dataloader import LandmarksDataModule
 import settings
 
 if __name__ == '__main__':

@@ -11,7 +11,6 @@ from torch.autograd import Variable
 import pytorch_lightning as pl
 import settings
 from circular_motion_functions import CircularMotionEstimationBase
-from custom_dataloader import LandmarksDataModule
 from argparse import ArgumentParser
 import pdb
 
@@ -145,6 +144,7 @@ class PointNetEncoder(nn.Module):
 class PointNet(pl.LightningModule):
     def __init__(self, hparams):
         super(PointNet, self).__init__()
+        self.hparams = hparams
         self.k = 2  # correction to x and y, will add a mask as 3rd dim later
         self.feat = PointNetEncoder(global_feat=False, feature_transform=True, channel=4)
         self.conv1 = torch.nn.Conv1d(1088, 512, 1)
@@ -154,26 +154,29 @@ class PointNet(pl.LightningModule):
         self.bn1 = nn.BatchNorm1d(512)
         self.bn2 = nn.BatchNorm1d(256)
         self.bn3 = nn.BatchNorm1d(128)
+        self.tanh = nn.Tanh()
 
         self.cme = CircularMotionEstimationBase()
 
     def forward(self, x):
-        b, c, n = x.shape
-        landmark_positions = torch.Tensor(x)
+        b, n, c = x.shape
+        x = x.transpose(1, 2).float()
+        # x = x.view(b, c, n).float() # not sure this is legit, have to swap dims but maybe this belongs in dataloader
+        landmark_positions = torch.Tensor(x.float())
         x, trans, trans_feat = self.feat(x)
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
         x = self.conv4(x)
+        x = self.tanh(x)
         x = x.transpose(2, 1).contiguous()
         x = x.view(b, n, self.k)
-        # add tanh
 
         prediction_set = torch.zeros(b, n, c)
         prediction_set[:, :, 1] = x[:, :, 0]
         prediction_set[:, :, 3] = x[:, :, 1]
 
-        landmark_positions = landmark_positions.view(b, n, c)
+        landmark_positions = landmark_positions.transpose(1, 2)
         corrected_landmark_positions = landmark_positions.add(prediction_set)
 
         return self.cme(corrected_landmark_positions)
