@@ -161,8 +161,8 @@ class PointNet(pl.LightningModule):
     def forward(self, x):
         b, n, c = x.shape
         x = x.transpose(1, 2).float()
-        # x = x.view(b, c, n).float() # not sure this is legit, have to swap dims but maybe this belongs in dataloader
-        landmark_positions = torch.Tensor(x.float())
+        # landmark_positions = torch.Tensor(x.float().to(self.device))
+        landmark_positions = x.float().to(self.device)
         x, trans, trans_feat = self.feat(x)
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
@@ -172,13 +172,15 @@ class PointNet(pl.LightningModule):
         x = x.transpose(2, 1).contiguous()
         x = x.view(b, n, self.k)
 
-        prediction_set = torch.zeros(b, n, c)
+        prediction_set = torch.zeros(b, n, c).to(self.device)
         prediction_set[:, :, 1] = x[:, :, 0]
         prediction_set[:, :, 3] = x[:, :, 1]
 
         landmark_positions = landmark_positions.transpose(1, 2)
         corrected_landmark_positions = landmark_positions.add(prediction_set)
 
+        # Scale landmark positions back up to metres (after being between [-1, 1] for predictions)
+        corrected_landmark_positions = corrected_landmark_positions * settings.MAX_LANDMARK_RANGE_METRES
         return self.cme(corrected_landmark_positions)
 
     def training_step(self, batch, batch_nb):
