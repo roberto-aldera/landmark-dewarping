@@ -181,6 +181,43 @@ class PointNet(pl.LightningModule):
 
         # Scale landmark positions back up to metres (after being between [-1, 1] for predictions)
         corrected_landmark_positions = corrected_landmark_positions * settings.MAX_LANDMARK_RANGE_METRES
+
+        # Quick check
+        do_plot = False
+        if do_plot:
+            import matplotlib.pyplot as plt
+            import numpy as np
+            plt.figure(figsize=(10, 10))
+            plt.grid()
+            plt.plot(np.array(landmark_positions[0, :, 1].detach().numpy()),
+                     np.array(landmark_positions[0, :, 3].detach().numpy()), 'b,', label="original_landmarks")
+            plt.plot(np.array(corrected_landmark_positions[0, :, 1].detach().numpy()),
+                     np.array(corrected_landmark_positions[0, :, 3].detach().numpy()), 'r,',
+                     label="corrected_landmarks")
+            plt.gca().set_aspect('equal', adjustable='box')
+            plt.savefig("%s%s" % (settings.RESULTS_DIR, "landmarks-and-corrections.pdf"))
+            plt.close()
+            print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "landmarks-and-corrections.pdf"))
+            pdb.set_trace()
+
+        do_theta_plot = True
+        if do_theta_plot:
+            import matplotlib.pyplot as plt
+            import numpy as np
+            original_thetas = self.cme(landmark_positions).squeeze(0)[:, 0]
+            corrected_thetas = self.cme(corrected_landmark_positions).squeeze(0)[:, 0]
+            plt.figure(figsize=(10, 10))
+            plt.grid()
+            plt.ylim(-0.5, 0.5)
+            plt.plot(np.sort(original_thetas.detach().numpy()), 'b.', markersize=2, label="original_thetas")
+            plt.plot(np.sort(corrected_thetas.detach().numpy()), 'r.', markersize=2, label="corrected_thetas")
+            plt.legend()
+            plt.savefig("%s%s%i%s" % (settings.RESULTS_DIR, "/thetas/", settings.PLOTTING_ITR, "thetas_for_a_sample.pdf"))
+            settings.PLOTTING_ITR += 1
+            plt.close()
+            # print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "thetas_for_a_sample.pdf"))
+            # pdb.set_trace()
+
         return self.cme(corrected_landmark_positions)
 
     def training_step(self, batch, batch_nb):
