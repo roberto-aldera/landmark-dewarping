@@ -15,7 +15,7 @@ from argparse import ArgumentParser
 import pdb
 
 
-class STNkd(nn.Module):
+class STNkd(nn.Module):  # Spatial Transformer Network
     def __init__(self, k=64):
         super(STNkd, self).__init__()
         self.conv1 = torch.nn.Conv1d(k, 64, 1)
@@ -55,48 +55,10 @@ class STNkd(nn.Module):
         return x
 
 
-class STN3d(nn.Module):
-    def __init__(self, channel):
-        super(STN3d, self).__init__()
-        self.conv1 = torch.nn.Conv1d(channel, 64, 1)
-        self.conv2 = torch.nn.Conv1d(64, 128, 1)
-        self.conv3 = torch.nn.Conv1d(128, 1024, 1)
-        self.fc1 = nn.Linear(1024, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, 9)
-        self.relu = nn.ReLU()
-
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(1024)
-        self.bn4 = nn.BatchNorm1d(512)
-        self.bn5 = nn.BatchNorm1d(256)
-
-    def forward(self, x):
-        batchsize = x.size()[0]
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = torch.max(x, 2, keepdim=True)[0]
-        x = x.view(-1, 1024)
-
-        x = F.relu(self.bn4(self.fc1(x)))
-        x = F.relu(self.bn5(self.fc2(x)))
-        x = self.fc3(x)
-
-        iden = Variable(torch.from_numpy(np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]).astype(np.float32))).view(1, 9).repeat(
-            batchsize, 1)
-        if x.is_cuda:
-            iden = iden.cuda()
-        x = x + iden
-        x = x.view(-1, 3, 3)
-        return x
-
-
 class PointNetEncoder(nn.Module):
     def __init__(self, global_feat=True, feature_transform=False, channel=3):
         super(PointNetEncoder, self).__init__()
-        self.stn = STN3d(channel)
+        self.STN2 = STNkd(k=2)
         self.conv1 = torch.nn.Conv1d(channel, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
@@ -110,15 +72,16 @@ class PointNetEncoder(nn.Module):
 
     def forward(self, x):
         B, D, N = x.size()
-        trans = self.stn(x)
-        x = x.transpose(2, 1)
-        if D > 3:
-            feature = x[:, :, 3:]
-            x = x[:, :, :3]
-        x = torch.bmm(x, trans)
-        if D > 3:
-            x = torch.cat([x, feature], dim=2)
-        x = x.transpose(2, 1)
+
+        # Collect landmarks (x, y) from set 1 and set 2
+        x1 = torch.cat((x[:, 0, :].unsqueeze(1), x[:, 2, :].unsqueeze(1)), dim=1)
+        x2 = torch.cat((x[:, 1, :].unsqueeze(1), x[:, 3, :].unsqueeze(1)), dim=1)
+        trans1 = self.STN2(x1)
+        trans2 = self.STN2(x2)
+        x1 = torch.bmm(x1.transpose(2, 1), trans1).transpose(2, 1)
+        x2 = torch.bmm(x2.transpose(2, 1), trans2).transpose(2, 1)
+        x = torch.cat((x1, x2), dim=1)
+
         x = F.relu(self.bn1(self.conv1(x)))
 
         if self.feature_transform:
@@ -135,10 +98,25 @@ class PointNetEncoder(nn.Module):
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
         if self.global_feat:
-            return x, trans, trans_feat
+            return x, trans_feat
         else:
             x = x.view(-1, 1024, 1).repeat(1, 1, N)
-            return torch.cat([x, pointfeat], 1), trans, trans_feat
+            return torch.cat([x, pointfeat], 1), trans_feat
+
+
+def init_weights(m):
+    if type(m) == nn.Conv1d:
+        # torch.nn.init.xavier_uniform(m.weight)
+        torch.nn.init.constant_(m.weight, 1e-6)
+        m.bias.data.fill_(1e-6)
+
+
+def loss_function(estimate, y):
+    loss = F.mse_loss(estimate, y, reduction="none")
+    loss = loss.median()  # TODO - make this a weighted loss based on match quality according to classic CME
+    # loss = loss.mean()
+    # pdb.set_trace()
+    return loss
 
 
 class PointNet(pl.LightningModule):
@@ -155,20 +133,23 @@ class PointNet(pl.LightningModule):
         self.bn2 = nn.BatchNorm1d(256)
         self.bn3 = nn.BatchNorm1d(128)
         self.tanh = nn.Tanh()
+        self.net = nn.Sequential(self.conv1, self.bn1, nn.ReLU(), self.conv2, self.bn2, nn.ReLU(), self.conv3, self.bn3,
+                                 nn.ReLU(), self.conv4, self.tanh)
 
         self.cme = CircularMotionEstimationBase()
 
-    def forward(self, x):
+        # initialise weights
+        self.net.apply(init_weights)
+
+    def _forward(self, x):
         b, n, c = x.shape
         x = x.transpose(1, 2).float()
-        # landmark_positions = torch.Tensor(x.float().to(self.device))
-        landmark_positions = x.float().to(self.device)
-        x, trans, trans_feat = self.feat(x)
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = self.conv4(x)
-        x = self.tanh(x)
+        landmark_positions = x.float()  # .to(self.device)
+        x, _ = self.feat(x)
+        nan_check = x.isnan().any()
+        if nan_check:
+            pdb.set_trace()
+        x = self.net(x)
         x = x.transpose(2, 1).contiguous()
         x = x.view(b, n, self.k)
 
@@ -178,15 +159,17 @@ class PointNet(pl.LightningModule):
 
         landmark_positions = landmark_positions.transpose(1, 2)
         corrected_landmark_positions = landmark_positions.add(prediction_set)
+        # pdb.set_trace()
 
         # Scale landmark positions back up to metres (after being between [-1, 1] for predictions)
-        corrected_landmark_positions = corrected_landmark_positions * settings.MAX_LANDMARK_RANGE_METRES
+        corrected_landmark_positions = torch.mul(corrected_landmark_positions, settings.MAX_LANDMARK_RANGE_METRES)
 
         # Quick check
-        do_plot = False
-        if do_plot:
+        do_plots = False
+        if do_plots:
             import matplotlib.pyplot as plt
             import numpy as np
+            landmark_positions = landmark_positions * settings.MAX_LANDMARK_RANGE_METRES
             plt.figure(figsize=(10, 10))
             plt.grid()
             plt.plot(np.array(landmark_positions[0, :, 1].detach().numpy()),
@@ -195,51 +178,54 @@ class PointNet(pl.LightningModule):
                      np.array(corrected_landmark_positions[0, :, 3].detach().numpy()), 'r,',
                      label="corrected_landmarks")
             plt.gca().set_aspect('equal', adjustable='box')
-            plt.savefig("%s%s" % (settings.RESULTS_DIR, "landmarks-and-corrections.pdf"))
+            plt.savefig("%s%s%i%s" % (
+                settings.RESULTS_DIR, "landmarks/", settings.PLOTTING_ITR, "_landmarks-and-corrections.pdf"))
             plt.close()
-            print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "landmarks-and-corrections.pdf"))
-            pdb.set_trace()
+            # print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "landmarks-and-corrections.pdf"))
 
-        do_theta_plot = True
-        if do_theta_plot:
-            import matplotlib.pyplot as plt
-            import numpy as np
             original_thetas = self.cme(landmark_positions).squeeze(0)[:, 0]
             corrected_thetas = self.cme(corrected_landmark_positions).squeeze(0)[:, 0]
             plt.figure(figsize=(10, 10))
             plt.grid()
             plt.ylim(-0.5, 0.5)
-            plt.plot(np.sort(original_thetas.detach().numpy()), 'b.', markersize=2, label="original_thetas")
-            plt.plot(np.sort(corrected_thetas.detach().numpy()), 'r.', markersize=2, label="corrected_thetas")
+            # plt.plot(np.sort(original_thetas.detach().numpy()), 'b.', markersize=2, label="original_thetas")
+            # plt.plot(np.sort(corrected_thetas.detach().numpy()), 'r.', markersize=2, label="corrected_thetas")
+            plt.plot(original_thetas.detach().numpy(), 'b.', markersize=2, label="original_thetas")
+            plt.plot(corrected_thetas.detach().numpy(), 'r.', markersize=2, label="corrected_thetas")
             plt.legend()
-            plt.savefig("%s%s%i%s" % (settings.RESULTS_DIR, "/thetas/", settings.PLOTTING_ITR, "thetas_for_a_sample.pdf"))
+            plt.savefig(
+                "%s%s%i%s" % (settings.RESULTS_DIR, "thetas/", settings.PLOTTING_ITR, "_thetas_for_a_sample.pdf"))
             settings.PLOTTING_ITR += 1
             plt.close()
             # print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "thetas_for_a_sample.pdf"))
             # pdb.set_trace()
 
+        return corrected_landmark_positions
+
+    def forward(self, x):
+        corrected_landmark_positions = self._forward(x)
+        # pdb.set_trace()
         return self.cme(corrected_landmark_positions)
 
     def training_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
         b, n, c = x.shape
+        y = y.float()
         y = torch.tile(y.unsqueeze(1), (1, n, 1))
 
         prediction = self.forward(x).to(self.device)
-        differences = y - prediction
-        loss = F.mse_loss(differences, torch.zeros_like(differences))
-        # loss = func.mse_loss(self.forward(x).to(self.device), y)
+        # theta_diffs = differences[:, :, 0]
+        loss = loss_function(prediction, y)
         self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
         b, n, c = x.shape
+        y = y.float()
         y = torch.tile(y.unsqueeze(1), (1, n, 1))
-
         prediction = self.forward(x).to(self.device)
-        differences = y - prediction
-        loss = F.mse_loss(differences, torch.zeros_like(differences))
+        loss = loss_function(prediction, y)
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
@@ -266,12 +252,8 @@ class PointNet(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    x = torch.rand((32, 4, 601))
-    y = torch.rand((32, 4, 432))
-    z = torch.rand((32, 4, 986))
-    hparams = None
-    emb_nn = PointNet(hparams)
+    x = torch.rand((32, 600, 4))
+    hparams = {}
+    net = PointNet(hparams)
+    y = net._forward(x)
     pdb.set_trace()
-    print(emb_nn(x).shape)  # torch.Size([32, 601, 2])
-    print(emb_nn(y).shape)  # torch.Size([32, 432, 2])
-    print(emb_nn(z).shape)  # torch.Size([32, 986, 2])

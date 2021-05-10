@@ -61,7 +61,7 @@ def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=Tr
         landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
         # Get Circular Motion Estimates from raw landmarks as baseline
         cme_function = CircularMotionEstimationBase()
-        raw_CMEs = cme_function(landmarks).squeeze(0)
+        raw_CMEs = cme_function(landmarks* settings.MAX_LANDMARK_RANGE_METRES).squeeze(0)
         raw_thetas = raw_CMEs[:, 0]
         raw_theta_estimate, raw_median_index = torch.median(raw_thetas, dim=0)
         raw_curvature_estimate = raw_CMEs[raw_median_index, 1]

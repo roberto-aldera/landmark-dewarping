@@ -5,9 +5,9 @@ import numpy as np
 # Ensure reproducibility
 pl.seed_everything(0)
 
-K_MAX_MATCHES = 500
+K_MAX_MATCHES = 600
 # Setting this range to 1 effectively turns off normalisation
-MAX_LANDMARK_RANGE_METRES = 1  # 165  # 3768 bins at a resolution of 0.0438 cm per bin
+MAX_LANDMARK_RANGE_METRES = 165  # 165  # 3768 bins at a resolution of 0.0438 cm per bin
 
 # General dataset parameters
 TOTAL_SAMPLES = 150
@@ -23,7 +23,7 @@ ARCHITECTURE_TYPE = "pointnet"
 NUM_CPUS = 8
 MAX_EPOCHS = 5
 LEARNING_RATE = 1e-4
-BATCH_SIZE = 96
+BATCH_SIZE = 32
 
 # Paths
 IS_RUNNING_ON_SERVER = False
