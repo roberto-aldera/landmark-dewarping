@@ -22,7 +22,7 @@ ARCHITECTURE_TYPE = "pointnet"
 # Training parameters
 NUM_CPUS = 8
 MAX_EPOCHS = 5
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-6
 BATCH_SIZE = 32
 
 # Paths

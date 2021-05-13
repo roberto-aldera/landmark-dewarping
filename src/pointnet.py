@@ -111,11 +111,57 @@ def init_weights(m):
         m.bias.data.fill_(1e-6)
 
 
-def loss_function(estimate, y):
-    loss = F.mse_loss(estimate, y, reduction="none")
-    loss = loss.median()  # TODO - make this a weighted loss based on match quality according to classic CME
-    # loss = loss.mean()
-    # pdb.set_trace()
+def loss_function(estimate, target):
+    b, _, _ = estimate.shape
+    estimated_thetas = estimate[:, :, 0]
+    quantiles = torch.tensor([0.1, 0.9])
+    mask = torch.zeros_like(estimated_thetas)
+    theta_quantiles = torch.quantile(estimated_thetas, quantiles, dim=1).transpose(0, 1)
+    mask[(estimated_thetas > theta_quantiles[:, 0].unsqueeze(1)) & (
+            estimated_thetas < theta_quantiles[:, 1].unsqueeze(1))] = 1
+
+    do_plots = True
+    if do_plots:
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(10, 7))
+        plt.grid()
+        plt.ylim(-0.2, 0.2)
+        plt.plot(np.sort(estimated_thetas.detach().numpy()), 'b+', markersize=2, mew=0.3, label="thetas")
+        plt.plot(np.sort((estimated_thetas * mask).detach().numpy()), 'r+', markersize=2, mew=0.3, label="thetas")
+        plt.title("Thetas from each match as batches")
+        plt.ylabel("Theta (rad)")
+        plt.xlabel("Index")
+        plt.savefig(
+            "%s%s" % (settings.RESULTS_DIR, "thetas_in_batches.pdf"))
+        plt.close()
+
+        # Get only those thetas that pass through the mask and plot them
+        theta_subsection = np.sort(estimated_thetas[0, :].detach() * mask[0, :])
+        theta_subsection = theta_subsection[theta_subsection != 0]
+        plt.figure(figsize=(10, 7))
+        plt.grid()
+        plt.ylim(-0.2, 0.2)
+        plt.plot(np.sort(estimated_thetas.detach().numpy()[0, :]), 'b+', markersize=2, mew=0.3, label="all thetas")
+        plt.plot(np.linspace(quantiles[0].item() * settings.K_MAX_MATCHES, quantiles[1].item() * settings.K_MAX_MATCHES,
+                             len(theta_subsection)), theta_subsection, 'r+', markersize=2, mew=0.3,
+                 label="inner thetas")
+        plt.title("Sorted thetas with quantiles")
+        plt.ylabel("Theta (rad)")
+        plt.xlabel("Index")
+        plt.legend()
+        plt.savefig(
+            "%s%s" % (settings.RESULTS_DIR, "theta_quantiles.pdf"))
+        plt.close()
+        pdb.set_trace()
+
+    target = target.float()
+    _, n = estimated_thetas.shape
+    target = torch.tile(target.unsqueeze(1), (1, n, 1))
+
+    loss = F.mse_loss(estimated_thetas, target[:, :, 0], reduction="none")
+    loss = loss * mask
+    loss = loss.mean()
+
     return loss
 
 
@@ -159,13 +205,12 @@ class PointNet(pl.LightningModule):
 
         landmark_positions = landmark_positions.transpose(1, 2)
         corrected_landmark_positions = landmark_positions.add(prediction_set)
-        # pdb.set_trace()
 
         # Scale landmark positions back up to metres (after being between [-1, 1] for predictions)
         corrected_landmark_positions = torch.mul(corrected_landmark_positions, settings.MAX_LANDMARK_RANGE_METRES)
 
         # Quick check
-        do_plots = False
+        do_plots = True
         if do_plots:
             import matplotlib.pyplot as plt
             import numpy as np
@@ -181,49 +226,41 @@ class PointNet(pl.LightningModule):
             plt.savefig("%s%s%i%s" % (
                 settings.RESULTS_DIR, "landmarks/", settings.PLOTTING_ITR, "_landmarks-and-corrections.pdf"))
             plt.close()
-            # print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "landmarks-and-corrections.pdf"))
 
             original_thetas = self.cme(landmark_positions).squeeze(0)[:, 0]
             corrected_thetas = self.cme(corrected_landmark_positions).squeeze(0)[:, 0]
-            plt.figure(figsize=(10, 10))
+            plt.figure(figsize=(10, 7))
             plt.grid()
-            plt.ylim(-0.5, 0.5)
-            # plt.plot(np.sort(original_thetas.detach().numpy()), 'b.', markersize=2, label="original_thetas")
-            # plt.plot(np.sort(corrected_thetas.detach().numpy()), 'r.', markersize=2, label="corrected_thetas")
-            plt.plot(original_thetas.detach().numpy(), 'b.', markersize=2, label="original_thetas")
-            plt.plot(corrected_thetas.detach().numpy(), 'r.', markersize=2, label="corrected_thetas")
+            plt.ylim(-0.2, 0.2)
+            plt.plot(np.sort(original_thetas.detach().numpy()), 'b+', markersize=2, mew=0.3, label="original_thetas")
+            plt.plot(np.sort(corrected_thetas.detach().numpy()), 'rx', markersize=2, mew=0.3, label="corrected_thetas")
+            # plt.plot(original_thetas.detach().numpy(), 'b.', markersize=2, label="original_thetas")
+            # plt.plot(corrected_thetas.detach().numpy(), 'rx', markersize=2, label="corrected_thetas")
+            plt.title("Sorted thetas from each match")
+            plt.ylabel("Theta (rad)")
+            plt.xlabel("Index")
             plt.legend()
             plt.savefig(
                 "%s%s%i%s" % (settings.RESULTS_DIR, "thetas/", settings.PLOTTING_ITR, "_thetas_for_a_sample.pdf"))
             settings.PLOTTING_ITR += 1
             plt.close()
-            # print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "thetas_for_a_sample.pdf"))
             # pdb.set_trace()
 
         return corrected_landmark_positions
 
     def forward(self, x):
         corrected_landmark_positions = self._forward(x)
-        # pdb.set_trace()
         return self.cme(corrected_landmark_positions)
 
     def training_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        b, n, c = x.shape
-        y = y.float()
-        y = torch.tile(y.unsqueeze(1), (1, n, 1))
-
         prediction = self.forward(x).to(self.device)
-        # theta_diffs = differences[:, :, 0]
         loss = loss_function(prediction, y)
         self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        b, n, c = x.shape
-        y = y.float()
-        y = torch.tile(y.unsqueeze(1), (1, n, 1))
         prediction = self.forward(x).to(self.device)
         loss = loss_function(prediction, y)
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
