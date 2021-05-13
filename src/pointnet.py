@@ -250,18 +250,18 @@ class PointNet(pl.LightningModule):
 
     def forward(self, x):
         corrected_landmark_positions = self._forward(x)
-        return self.cme(corrected_landmark_positions)
+        return self.cme(corrected_landmark_positions), corrected_landmark_positions
 
     def training_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        prediction = self.forward(x).to(self.device)
+        prediction = self.forward(x)[0].to(self.device)
         loss = loss_function(self, prediction, y)
         self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        prediction = self.forward(x).to(self.device)
+        prediction = self.forward(x)[0].to(self.device)
         loss = loss_function(self, prediction, y)
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
@@ -292,5 +292,5 @@ if __name__ == "__main__":
     x = torch.rand((32, 600, 4))
     hparams = {}
     net = PointNet(hparams)
-    y = net._forward(x)
+    y = net._forward(x)[0]
     pdb.set_trace()

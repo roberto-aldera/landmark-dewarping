@@ -10,7 +10,7 @@ K_MAX_MATCHES = 600
 MAX_LANDMARK_RANGE_METRES = 165  # 165  # 3768 bins at a resolution of 0.0438 cm per bin
 
 # General dataset parameters
-TOTAL_SAMPLES = 90
+TOTAL_SAMPLES = 150
 TRAIN_RATIO = 0.8
 TRAIN_SET_SIZE = int(TOTAL_SAMPLES * TRAIN_RATIO)
 VAL_SET_SIZE = TOTAL_SAMPLES - TRAIN_SET_SIZE
@@ -28,7 +28,7 @@ BATCH_SIZE = 32
 # Bools
 IS_RUNNING_ON_SERVER = False
 DO_PLOTS_IN_LOSS = False
-DO_PLOTS_IN_FORWARD_PASS = True
+DO_PLOTS_IN_FORWARD_PASS = False
 
 if IS_RUNNING_ON_SERVER is True:
     ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"
