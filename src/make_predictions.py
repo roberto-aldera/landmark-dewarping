@@ -9,6 +9,7 @@ from torch.utils.data import random_split, DataLoader
 from pointnet_dataloader import LandmarksDataModule, LandmarkDataset, ToTensor, Normalise, FixSampleSize
 from circular_motion_functions import get_transform_by_r_and_theta, save_timestamps_and_cme_to_csv, MotionEstimate, \
     CircularMotionEstimationBase
+from get_rigid_body_motion import get_motion_estimate_from_svd
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -54,69 +55,69 @@ def debugging_with_plots(model, data_loader):
 
 
 def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=True):
-    raw_cm = []
+    raw_SVD_results = []
     cm_predictions = []
     num_samples = len(data_loader.dataset)  # settings.TOTAL_SAMPLES
     for i in tqdm(range(num_samples)):
         landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
         # Get Circular Motion Estimates from raw landmarks as baseline
         cme_function = CircularMotionEstimationBase()
-        raw_CMEs = cme_function(landmarks* settings.MAX_LANDMARK_RANGE_METRES).squeeze(0)
+        raw_CMEs = cme_function(landmarks * settings.MAX_LANDMARK_RANGE_METRES).squeeze(0)
         raw_thetas = raw_CMEs[:, 0]
-        raw_theta_estimate, raw_median_index = torch.median(raw_thetas, dim=0)
-        raw_curvature_estimate = raw_CMEs[raw_median_index, 1]
-        best_raw_cm_prediction = [raw_theta_estimate, raw_curvature_estimate]
-        raw_cm.append(best_raw_cm_prediction)
 
-        # Get Circular Motion Estimates from from landmarks that have been corrected by network
-        prediction = model(landmarks).detach().squeeze(0)
-        valid_predictions = prediction[~torch.any(prediction.isnan(), dim=1)]
-        valid_thetas = valid_predictions[:, 0]
-        theta_estimate, median_index = torch.median(valid_thetas, dim=0)
-        curvature_estimate = valid_predictions[median_index, 1]
-        best_cm_prediction = [theta_estimate, curvature_estimate]
-        cm_predictions.append(best_cm_prediction)
-        # cm_predictions.append(model(landmarks).detach().numpy().squeeze(0))
+        # Grab indices where theta is in a certain acceptable range
+        quantiles = torch.tensor([0.1, 0.9], dtype=torch.float64)
+        theta_quantiles = torch.quantile(raw_thetas, quantiles)
+        inlier_indices = torch.where((raw_thetas > theta_quantiles[0]) & (raw_thetas < theta_quantiles[1]))
+        inlier_landmarks = torch.index_select(landmarks * settings.MAX_LANDMARK_RANGE_METRES, 1,
+                                              inlier_indices[0]).squeeze(0)
+        # Then find SVD motion using landmark matches corresponding to these indices
+        P1 = np.transpose(np.column_stack((inlier_landmarks[:, 0], inlier_landmarks[:, 2])))
+        P2 = np.transpose(np.column_stack((inlier_landmarks[:, 1], inlier_landmarks[:, 3])))
+        v, theta_R = get_motion_estimate_from_svd(P1, P2, weights=np.ones(P1.shape[1]))
+        raw_SVD_results.append([v[1], v[0], -theta_R])
+
+        # # Get Circular Motion Estimates from from landmarks that have been corrected by network
+        # prediction = model(landmarks).detach().squeeze(0)
+        # valid_predictions = prediction[~torch.any(prediction.isnan(), dim=1)]
+        # valid_thetas = valid_predictions[:, 0]
+        # theta_estimate, median_index = torch.median(valid_thetas, dim=0)
+        # curvature_estimate = valid_predictions[median_index, 1]
+        # best_cm_prediction = [theta_estimate, curvature_estimate]
+        # cm_predictions.append(best_cm_prediction)
+        # # cm_predictions.append(model(landmarks).detach().numpy().squeeze(0))
 
     # Get poses from raw CMEs
     raw_motion_estimates = []
-    for idx in range(len(raw_cm)):
-        th_estimate = np.array(raw_cm[idx][0])
-        curvature_estimate = np.array(raw_cm[idx][1])
-        if curvature_estimate == 0:
-            r_estimate = np.inf
-        else:
-            r_estimate = 1 / curvature_estimate
-
-        se3_from_r_theta = get_transform_by_r_and_theta(r_estimate, th_estimate)
-        x_est = se3_from_r_theta[0, 3]
-        y_est = se3_from_r_theta[1, 3]
-        th_est = np.arctan2(se3_from_r_theta[1, 0], se3_from_r_theta[0, 0])
+    for idx in range(len(raw_SVD_results)):
+        x_est = raw_SVD_results[idx][0]
+        y_est = raw_SVD_results[idx][1]
+        th_est = raw_SVD_results[idx][2]
         raw_motion_estimates.append(
-            MotionEstimate(theta=th_estimate, curvature=curvature_estimate, dx=x_est, dy=y_est, dth=th_est))
+            MotionEstimate(theta=0, curvature=0, dx=x_est, dy=y_est, dth=th_est))
     if do_csv_export:
-        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(cm_predictions)), motion_estimates=raw_motion_estimates,
+        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(raw_SVD_results)), motion_estimates=raw_motion_estimates,
                                        pose_source="raw_cm-pred", export_folder=settings.RESULTS_DIR)
 
-    # Get poses from predicted correction CMEs
-    motion_estimates = []
-    for idx in range(len(cm_predictions)):
-        th_estimate = np.array(cm_predictions[idx][0])
-        curvature_estimate = np.array(cm_predictions[idx][1])
-        if curvature_estimate == 0:
-            r_estimate = np.inf
-        else:
-            r_estimate = 1 / curvature_estimate
-
-        se3_from_r_theta = get_transform_by_r_and_theta(r_estimate, th_estimate)
-        x_est = se3_from_r_theta[0, 3]
-        y_est = se3_from_r_theta[1, 3]
-        th_est = np.arctan2(se3_from_r_theta[1, 0], se3_from_r_theta[0, 0])
-        motion_estimates.append(
-            MotionEstimate(theta=th_estimate, curvature=curvature_estimate, dx=x_est, dy=y_est, dth=th_est))
-    if do_csv_export:
-        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(cm_predictions)), motion_estimates=motion_estimates,
-                                       pose_source="cm-pred", export_folder=settings.RESULTS_DIR)
+    # # Get poses from predicted correction CMEs
+    # motion_estimates = []
+    # for idx in range(len(cm_predictions)):
+    #     th_estimate = np.array(cm_predictions[idx][0])
+    #     curvature_estimate = np.array(cm_predictions[idx][1])
+    #     if curvature_estimate == 0:
+    #         r_estimate = np.inf
+    #     else:
+    #         r_estimate = 1 / curvature_estimate
+    #
+    #     se3_from_r_theta = get_transform_by_r_and_theta(r_estimate, th_estimate)
+    #     x_est = se3_from_r_theta[0, 3]
+    #     y_est = se3_from_r_theta[1, 3]
+    #     th_est = np.arctan2(se3_from_r_theta[1, 0], se3_from_r_theta[0, 0])
+    #     motion_estimates.append(
+    #         MotionEstimate(theta=th_estimate, curvature=curvature_estimate, dx=x_est, dy=y_est, dth=th_est))
+    # if do_csv_export:
+    #     save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(cm_predictions)), motion_estimates=motion_estimates,
+    #                                    pose_source="cm-pred", export_folder=settings.RESULTS_DIR)
 
 
 def get_data_from_csv(csv_file):

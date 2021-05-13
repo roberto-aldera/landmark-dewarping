@@ -111,17 +111,16 @@ def init_weights(m):
         m.bias.data.fill_(1e-6)
 
 
-def loss_function(estimate, target):
+def loss_function(self, estimate, target):
     b, _, _ = estimate.shape
     estimated_thetas = estimate[:, :, 0]
-    quantiles = torch.tensor([0.1, 0.9])
+    quantiles = torch.tensor([0.1, 0.9]).to(self.device)
     mask = torch.zeros_like(estimated_thetas)
     theta_quantiles = torch.quantile(estimated_thetas, quantiles, dim=1).transpose(0, 1)
     mask[(estimated_thetas > theta_quantiles[:, 0].unsqueeze(1)) & (
             estimated_thetas < theta_quantiles[:, 1].unsqueeze(1))] = 1
 
-    do_plots = True
-    if do_plots:
+    if settings.DO_PLOTS_IN_LOSS:
         import matplotlib.pyplot as plt
         plt.figure(figsize=(10, 7))
         plt.grid()
@@ -210,13 +209,14 @@ class PointNet(pl.LightningModule):
         corrected_landmark_positions = torch.mul(corrected_landmark_positions, settings.MAX_LANDMARK_RANGE_METRES)
 
         # Quick check
-        do_plots = True
-        if do_plots:
+        if settings.DO_PLOTS_IN_FORWARD_PASS:
             import matplotlib.pyplot as plt
             import numpy as np
             landmark_positions = landmark_positions * settings.MAX_LANDMARK_RANGE_METRES
             plt.figure(figsize=(10, 10))
             plt.grid()
+            plt.xlim(-settings.MAX_LANDMARK_RANGE_METRES, settings.MAX_LANDMARK_RANGE_METRES)
+            plt.ylim(-settings.MAX_LANDMARK_RANGE_METRES, settings.MAX_LANDMARK_RANGE_METRES)
             plt.plot(np.array(landmark_positions[0, :, 1].detach().numpy()),
                      np.array(landmark_positions[0, :, 3].detach().numpy()), 'b,', label="original_landmarks")
             plt.plot(np.array(corrected_landmark_positions[0, :, 1].detach().numpy()),
@@ -255,14 +255,14 @@ class PointNet(pl.LightningModule):
     def training_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
         prediction = self.forward(x).to(self.device)
-        loss = loss_function(prediction, y)
+        loss = loss_function(self, prediction, y)
         self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
         prediction = self.forward(x).to(self.device)
-        loss = loss_function(prediction, y)
+        loss = loss_function(self, prediction, y)
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
