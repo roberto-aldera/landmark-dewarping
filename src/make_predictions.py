@@ -58,15 +58,17 @@ def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=Tr
     raw_SVD_results = []
     dewarped_SVD_results = []
     num_samples = len(data_loader.dataset)  # settings.TOTAL_SAMPLES
+    quantile_width = 0.99
+    quantiles = torch.tensor([0.5 - quantile_width / 2, 0.5 + quantile_width / 2], dtype=torch.float32)
+
     for i in tqdm(range(num_samples)):
         landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
         # Get Circular Motion Estimates from raw landmarks as baseline
         cme_function = CircularMotionEstimationBase()
         raw_CMEs = cme_function(landmarks * settings.MAX_LANDMARK_RANGE_METRES).squeeze(0)
-        raw_thetas = raw_CMEs[:, 0]
+        raw_thetas = raw_CMEs[:, 0].type(torch.FloatTensor)
 
         # Grab indices where theta is in a certain acceptable range
-        quantiles = torch.tensor([0.1, 0.9], dtype=torch.float64)
         theta_quantiles = torch.quantile(raw_thetas, quantiles)
         inlier_indices = torch.where((raw_thetas > theta_quantiles[0]) & (raw_thetas < theta_quantiles[1]))
         inlier_landmarks = torch.index_select(landmarks * settings.MAX_LANDMARK_RANGE_METRES, 1,
@@ -84,7 +86,6 @@ def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=Tr
         dewarped_thetas = prediction[:, 1]
 
         # Grab indices where theta is in a certain acceptable range
-        quantiles = torch.tensor([0.1, 0.9], dtype=torch.float32)
         theta_quantiles = torch.quantile(dewarped_thetas, quantiles)
         inlier_indices = torch.where((dewarped_thetas > theta_quantiles[0]) & (dewarped_thetas < theta_quantiles[1]))
         inlier_landmarks = torch.index_select(corrected_landmarks, 0, inlier_indices[0]).squeeze(0)

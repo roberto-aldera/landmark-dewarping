@@ -44,6 +44,9 @@ class CircularMotionEstimationBase(torch.nn.Module):
         stationary_landmark_mask = (r1 == r2) & (a1 == a2)
         # Need to check if any other denominators could contain zero
         # For theta: ((r1 / r2) * torch.cos(a1) + torch.cos(a2))) -> not yet encountered (or handled)
+        theta_denominator = (r1 / r2) * torch.cos(a1) + torch.cos(a2)
+        if (theta_denominator == 0).any():
+            pdb.set_trace()
 
         thetas = 2 * torch.atan(
             (-torch.sin(a2) + (r1 / r2) * torch.sin(a1)) / ((r1 / r2) * torch.cos(a1) + torch.cos(a2)))
@@ -51,6 +54,7 @@ class CircularMotionEstimationBase(torch.nn.Module):
         # For radii: (2 * torch.sin(thetas / 2) * torch.sin(-a1 + (thetas / 2)))
         # radii = torch.full(thetas.shape, float('inf'))  # gives us a starting point
         denominator = (2 * torch.sin(thetas / 2) * torch.sin(-a1 + (thetas / 2)))
+        # denominator[denominator == 0] = torch.finfo(denominator.dtype).tiny  # this is too tiny apparently
         denominator[denominator == 0] = 1e-9  # set to a tiny number for now
         radii = (r2 * torch.sin(a1 - a2 - thetas)) / denominator
         radii.masked_fill_(stationary_landmark_mask, float('inf'))

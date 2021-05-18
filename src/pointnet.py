@@ -72,24 +72,16 @@ class STNkd(nn.Module):  # Spatial Transformer Network
         self.k = k
 
         # initialise weights
-        nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
-        nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
-        nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
-        nn.init.constant_(self.fc1.weight, settings.WEIGHT_INIT_VAL)
-        nn.init.constant_(self.fc2.weight, settings.WEIGHT_INIT_VAL)
-        nn.init.constant_(self.fc3.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.fc1.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.fc2.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.fc3.weight, settings.WEIGHT_INIT_VAL)
 
     def forward(self, x):
         batchsize = x.size()[0]
-        if settings.DEBUG_COUNTER > 40:
-            pdb.set_trace()
-        nan_check = x.isnan().any()
-        if nan_check:
-            pdb.set_trace()
         x = F.relu(self.bn1(self.conv1(x)))
-        nan_check = x.isnan().any()
-        if nan_check:
-            pdb.set_trace()
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
         x = torch.max(x, 2, keepdim=True)[0]
@@ -124,30 +116,23 @@ class PointNetEncoder(nn.Module):
             self.fstn = STNkd(k=64)
 
         # initialise weights
-        nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
-        nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
-        nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
 
     def forward(self, x):
         B, D, N = x.size()
 
         # Collect landmarks (x, y) from set 1 and set 2
-        # x1 = torch.cat((x[:, 0, :].unsqueeze(1), x[:, 2, :].unsqueeze(1)), dim=1)
-        # x2 = torch.cat((x[:, 1, :].unsqueeze(1), x[:, 3, :].unsqueeze(1)), dim=1)
-        # trans1 = self.STN2(x1)
-        # trans2 = self.STN2(x2)
-        # nan_check = trans1.isnan().any()
-        # if nan_check:
-        #     pdb.set_trace()
-        # x1 = torch.bmm(x1.transpose(2, 1), trans1).transpose(2, 1)
-        # x2 = torch.bmm(x2.transpose(2, 1), trans2).transpose(2, 1)
-        # x = torch.cat((x1, x2), dim=1)
+        x1 = torch.cat((x[:, 0, :].unsqueeze(1), x[:, 2, :].unsqueeze(1)), dim=1)
+        x2 = torch.cat((x[:, 1, :].unsqueeze(1), x[:, 3, :].unsqueeze(1)), dim=1)
+        trans1 = self.STN2(x1)
+        trans2 = self.STN2(x2)
+        x1 = torch.bmm(x1.transpose(2, 1), trans1).transpose(2, 1)
+        x2 = torch.bmm(x2.transpose(2, 1), trans2).transpose(2, 1)
+        x = torch.cat((x1, x2), dim=1)
 
         x = F.relu(self.bn1(self.conv1(x)))
-        nan_check = x.isnan().any()
-        inf_check = x.isinf().any()
-        if nan_check or inf_check:
-            pdb.set_trace()
         if self.feature_transform:
             trans_feat = self.fstn(x)
             x = x.transpose(2, 1)
@@ -172,16 +157,10 @@ def loss_function(self, estimate, target):
     b, _, _ = estimate.shape
     estimated_thetas = estimate[:, :, 0]
     mask = torch.zeros_like(estimated_thetas)
-    # pdb.set_trace()
     quantiles = torch.tensor([0.25, 0.75]).to(self.device)
     theta_quantiles = torch.quantile(estimated_thetas, quantiles, dim=1).transpose(0, 1)
     mask[(estimated_thetas > theta_quantiles[:, 0].unsqueeze(1)) & (
             estimated_thetas < theta_quantiles[:, 1].unsqueeze(1))] = 1
-
-    # Try using standard deviation here rather than quantiles (doesn't seem strict enough)
-    # theta_upper_bound = estimated_thetas.mean(dim=1) + estimated_thetas.std(dim=1)
-    # theta_lower_bound = estimated_thetas.mean(dim=1) - estimated_thetas.std(dim=1)
-    # mask[(estimated_thetas > theta_lower_bound.unsqueeze(1)) & (estimated_thetas < theta_upper_bound.unsqueeze(1))] =1
 
     if settings.DO_PLOTS_IN_LOSS:
         plt.figure(figsize=(10, 7))
@@ -239,7 +218,7 @@ class PointNet(pl.LightningModule):
         super(PointNet, self).__init__()
         self.hparams = hparams
         self.k = 2  # correction to x and y, will add a mask as 3rd dim later
-        self.feat = PointNetEncoder(global_feat=False, feature_transform=False, channel=4)
+        self.feat = PointNetEncoder(global_feat=False, feature_transform=True, channel=4)
         self.conv1 = torch.nn.Conv1d(1088, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
@@ -247,7 +226,6 @@ class PointNet(pl.LightningModule):
         self.bn1 = nn.BatchNorm1d(512)
         self.bn2 = nn.BatchNorm1d(256)
         self.bn3 = nn.BatchNorm1d(128)
-        # self.tanh = nn.Tanh()
         self.tanh = weightedTanh()
         self.net = nn.Sequential(self.conv1, self.bn1, nn.ReLU(), self.conv2, self.bn2, nn.ReLU(), self.conv3, self.bn3,
                                  nn.ReLU(), self.conv4, self.tanh)
@@ -255,31 +233,42 @@ class PointNet(pl.LightningModule):
         self.cme = CircularMotionEstimationBase()
 
         # initialise weights
-        nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
-        nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
-        nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
-        nn.init.constant_(self.conv4.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
+        # nn.init.constant_(self.conv4.weight, settings.WEIGHT_INIT_VAL)
 
     def _forward(self, x):
         b, n, c = x.shape
+        # pdb.set_trace()
         x = x.transpose(1, 2).float()
-        landmark_positions = x.float()  # .to(self.device)
-        # nan_check = x.isnan().any()
-        # inf_check = x.isinf().any()
-        # if nan_check or inf_check:
-        #     pdb.set_trace()
+        landmark_positions = x.float()
         x, _ = self.feat(x)
-        # nan_check = x.isnan().any()
-        # inf_check = x.isinf().any()
-        # if nan_check or inf_check:
-        #     pdb.set_trace()
         x = self.net(x)
         x = x.transpose(2, 1).contiguous()
         x = x.view(b, n, self.k)
 
         prediction_set = torch.zeros(b, n, c).to(self.device)
+        # Perhaps set minimum prediction gate here
+        # min_correction = 0.0004
+        # too_tiny_0 = torch.where(x[:, :, 0].abs() < min_correction)
+        # too_tiny_1 = torch.where(x[:, :, 1].abs() < min_correction)
+        # x[:, too_tiny_0[1], 0] = 0
+        # x[:, too_tiny_1[1], 1] = 0
         prediction_set[:, :, 1] = x[:, :, 0]
         prediction_set[:, :, 3] = x[:, :, 1]
+
+        if settings.DO_CORRECTION_MAGNITUDE_PLOTS:
+            import numpy as np
+            plt.figure(figsize=(10, 10))
+            plt.grid()
+            plt.title("Corrections in x and y position of each landmark")
+            plt.plot(np.array(x[:, :, 0].squeeze(0).detach().numpy()), 'rx', markersize=2, mew=0.3, label="0s")
+            plt.plot(np.array(x[:, :, 1].squeeze(0).detach().numpy()), 'b+', markersize=2, mew=0.3, label="1s")
+            plt.savefig("%s%s%i%s" % (
+                settings.RESULTS_DIR, "corrections/", settings.CORRECTION_PLOTTING_ITR, "_corrections.pdf"))
+            plt.close()
+            settings.CORRECTION_PLOTTING_ITR += 1
 
         landmark_positions = landmark_positions.transpose(1, 2)
         corrected_landmark_positions = landmark_positions.add(prediction_set)
