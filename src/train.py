@@ -1,4 +1,5 @@
 import pytorch_lightning as pl
+import torch
 from argparse import ArgumentParser
 from pathlib import Path
 import time
@@ -8,6 +9,7 @@ import settings
 
 if __name__ == '__main__':
     start_time = time.time()
+    torch.autograd.set_detect_anomaly(True)
 
     Path(settings.RESULTS_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.MODEL_DIR).mkdir(parents=True, exist_ok=True)
@@ -32,6 +34,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer.from_argparse_args(params,
                                             default_root_dir=settings.MODEL_DIR,
                                             max_epochs=params.max_num_epochs)
+    # gradient_clip_val=0.05)  # here if required
     dm = LandmarksDataModule()
     trainer.fit(model, dm)
 

@@ -1,5 +1,7 @@
 # Source of original template compiled from here: https://github.com/yanx27/Pointnet_Pointnet2_pytorch
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 import torch
 import torch.nn as nn
@@ -13,6 +15,41 @@ import settings
 from circular_motion_functions import CircularMotionEstimationBase
 from argparse import ArgumentParser
 import pdb
+
+
+def plot_grad_flow(named_parameters):
+    """
+    Plots the gradients flowing through different layers in the net during training.
+    Can be used for checking for possible gradient vanishing / exploding problems.
+
+    Usage: Plug this function in Trainer class after loss.backwards() as
+    "plot_grad_flow(self.model.named_parameters())" to visualize the gradient flow
+    """
+    ave_grads = []
+    max_grads = []
+    layers = []
+    for name, parameter in named_parameters:
+        if parameter.requires_grad and ("bias" not in name):
+            layers.append(name)
+            ave_grads.append(parameter.abs().mean().detach().numpy())
+            max_grads.append(parameter.abs().max().detach().numpy())
+    plt.figure(figsize=(10, 10))
+    plt.bar(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
+    plt.bar(np.arange(len(max_grads)), ave_grads, alpha=0.1, lw=1, color="b")
+    plt.hlines(0, 0, len(ave_grads) + 1, lw=2, color="k")
+    plt.xticks(range(0, len(ave_grads), 1), layers, rotation="vertical")
+    plt.xlim(left=0, right=len(ave_grads))
+    plt.ylim(bottom=-0.001, top=0.2)  # zoom in on the lower gradient regions
+    plt.xlabel("Layers")
+    plt.ylabel("average gradient")
+    plt.title("Gradient flow")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.legend([Line2D([0], [0], color="c", lw=4),
+                Line2D([0], [0], color="b", lw=4),
+                Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
+    plt.savefig("%s%s%i%s" % (settings.RESULTS_DIR, "gradients/", settings.GRAD_PLOTTING_ITR, "_gradients.pdf"))
+    plt.close()
 
 
 class STNkd(nn.Module):  # Spatial Transformer Network
@@ -34,9 +71,25 @@ class STNkd(nn.Module):  # Spatial Transformer Network
 
         self.k = k
 
+        # initialise weights
+        nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
+        nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
+        nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
+        nn.init.constant_(self.fc1.weight, settings.WEIGHT_INIT_VAL)
+        nn.init.constant_(self.fc2.weight, settings.WEIGHT_INIT_VAL)
+        nn.init.constant_(self.fc3.weight, settings.WEIGHT_INIT_VAL)
+
     def forward(self, x):
         batchsize = x.size()[0]
+        if settings.DEBUG_COUNTER > 40:
+            pdb.set_trace()
+        nan_check = x.isnan().any()
+        if nan_check:
+            pdb.set_trace()
         x = F.relu(self.bn1(self.conv1(x)))
+        nan_check = x.isnan().any()
+        if nan_check:
+            pdb.set_trace()
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
         x = torch.max(x, 2, keepdim=True)[0]
@@ -70,20 +123,31 @@ class PointNetEncoder(nn.Module):
         if self.feature_transform:
             self.fstn = STNkd(k=64)
 
+        # initialise weights
+        nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
+        nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
+        nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
+
     def forward(self, x):
         B, D, N = x.size()
 
         # Collect landmarks (x, y) from set 1 and set 2
-        x1 = torch.cat((x[:, 0, :].unsqueeze(1), x[:, 2, :].unsqueeze(1)), dim=1)
-        x2 = torch.cat((x[:, 1, :].unsqueeze(1), x[:, 3, :].unsqueeze(1)), dim=1)
-        trans1 = self.STN2(x1)
-        trans2 = self.STN2(x2)
-        x1 = torch.bmm(x1.transpose(2, 1), trans1).transpose(2, 1)
-        x2 = torch.bmm(x2.transpose(2, 1), trans2).transpose(2, 1)
-        x = torch.cat((x1, x2), dim=1)
+        # x1 = torch.cat((x[:, 0, :].unsqueeze(1), x[:, 2, :].unsqueeze(1)), dim=1)
+        # x2 = torch.cat((x[:, 1, :].unsqueeze(1), x[:, 3, :].unsqueeze(1)), dim=1)
+        # trans1 = self.STN2(x1)
+        # trans2 = self.STN2(x2)
+        # nan_check = trans1.isnan().any()
+        # if nan_check:
+        #     pdb.set_trace()
+        # x1 = torch.bmm(x1.transpose(2, 1), trans1).transpose(2, 1)
+        # x2 = torch.bmm(x2.transpose(2, 1), trans2).transpose(2, 1)
+        # x = torch.cat((x1, x2), dim=1)
 
         x = F.relu(self.bn1(self.conv1(x)))
-
+        nan_check = x.isnan().any()
+        inf_check = x.isinf().any()
+        if nan_check or inf_check:
+            pdb.set_trace()
         if self.feature_transform:
             trans_feat = self.fstn(x)
             x = x.transpose(2, 1)
@@ -104,24 +168,22 @@ class PointNetEncoder(nn.Module):
             return torch.cat([x, pointfeat], 1), trans_feat
 
 
-def init_weights(m):
-    if type(m) == nn.Conv1d:
-        # torch.nn.init.xavier_uniform(m.weight)
-        torch.nn.init.constant_(m.weight, 1e-6)
-        m.bias.data.fill_(1e-6)
-
-
 def loss_function(self, estimate, target):
     b, _, _ = estimate.shape
     estimated_thetas = estimate[:, :, 0]
-    quantiles = torch.tensor([0.1, 0.9]).to(self.device)
     mask = torch.zeros_like(estimated_thetas)
+    # pdb.set_trace()
+    quantiles = torch.tensor([0.25, 0.75]).to(self.device)
     theta_quantiles = torch.quantile(estimated_thetas, quantiles, dim=1).transpose(0, 1)
     mask[(estimated_thetas > theta_quantiles[:, 0].unsqueeze(1)) & (
             estimated_thetas < theta_quantiles[:, 1].unsqueeze(1))] = 1
 
+    # Try using standard deviation here rather than quantiles (doesn't seem strict enough)
+    # theta_upper_bound = estimated_thetas.mean(dim=1) + estimated_thetas.std(dim=1)
+    # theta_lower_bound = estimated_thetas.mean(dim=1) - estimated_thetas.std(dim=1)
+    # mask[(estimated_thetas > theta_lower_bound.unsqueeze(1)) & (estimated_thetas < theta_upper_bound.unsqueeze(1))] =1
+
     if settings.DO_PLOTS_IN_LOSS:
-        import matplotlib.pyplot as plt
         plt.figure(figsize=(10, 7))
         plt.grid()
         plt.ylim(-0.2, 0.2)
@@ -152,7 +214,6 @@ def loss_function(self, estimate, target):
             "%s%s" % (settings.RESULTS_DIR, "theta_quantiles.pdf"))
         plt.close()
         pdb.set_trace()
-
     target = target.float()
     _, n = estimated_thetas.shape
     target = torch.tile(target.unsqueeze(1), (1, n, 1))
@@ -160,8 +221,17 @@ def loss_function(self, estimate, target):
     loss = F.mse_loss(estimated_thetas, target[:, :, 0], reduction="none")
     loss = loss * mask
     loss = loss.mean()
-
     return loss
+
+
+class weightedTanh(nn.Module):
+    def __init__(self, weights=1 / settings.MAX_LANDMARK_RANGE_METRES):
+        super().__init__()
+        self.weights = weights
+
+    def forward(self, input):
+        ex = torch.exp(2 * self.weights * input)
+        return (ex - 1) / (ex + 1)
 
 
 class PointNet(pl.LightningModule):
@@ -169,7 +239,7 @@ class PointNet(pl.LightningModule):
         super(PointNet, self).__init__()
         self.hparams = hparams
         self.k = 2  # correction to x and y, will add a mask as 3rd dim later
-        self.feat = PointNetEncoder(global_feat=False, feature_transform=True, channel=4)
+        self.feat = PointNetEncoder(global_feat=False, feature_transform=False, channel=4)
         self.conv1 = torch.nn.Conv1d(1088, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
@@ -177,23 +247,32 @@ class PointNet(pl.LightningModule):
         self.bn1 = nn.BatchNorm1d(512)
         self.bn2 = nn.BatchNorm1d(256)
         self.bn3 = nn.BatchNorm1d(128)
-        self.tanh = nn.Tanh()
+        # self.tanh = nn.Tanh()
+        self.tanh = weightedTanh()
         self.net = nn.Sequential(self.conv1, self.bn1, nn.ReLU(), self.conv2, self.bn2, nn.ReLU(), self.conv3, self.bn3,
                                  nn.ReLU(), self.conv4, self.tanh)
 
         self.cme = CircularMotionEstimationBase()
 
         # initialise weights
-        self.net.apply(init_weights)
+        nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
+        nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
+        nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
+        nn.init.constant_(self.conv4.weight, settings.WEIGHT_INIT_VAL)
 
     def _forward(self, x):
         b, n, c = x.shape
         x = x.transpose(1, 2).float()
         landmark_positions = x.float()  # .to(self.device)
+        # nan_check = x.isnan().any()
+        # inf_check = x.isinf().any()
+        # if nan_check or inf_check:
+        #     pdb.set_trace()
         x, _ = self.feat(x)
-        nan_check = x.isnan().any()
-        if nan_check:
-            pdb.set_trace()
+        # nan_check = x.isnan().any()
+        # inf_check = x.isinf().any()
+        # if nan_check or inf_check:
+        #     pdb.set_trace()
         x = self.net(x)
         x = x.transpose(2, 1).contiguous()
         x = x.view(b, n, self.k)
@@ -210,7 +289,6 @@ class PointNet(pl.LightningModule):
 
         # Quick check
         if settings.DO_PLOTS_IN_FORWARD_PASS:
-            import matplotlib.pyplot as plt
             import numpy as np
             landmark_positions = landmark_positions * settings.MAX_LANDMARK_RANGE_METRES
             plt.figure(figsize=(10, 10))
@@ -257,6 +335,11 @@ class PointNet(pl.LightningModule):
         prediction = self.forward(x)[0].to(self.device)
         loss = loss_function(self, prediction, y)
         self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+
+        if settings.DO_GRADIENT_PLOTS:
+            if settings.GRAD_PLOTTING_ITR > 0:
+                plot_grad_flow(self.named_parameters())
+            settings.GRAD_PLOTTING_ITR += 1
         return loss
 
     def validation_step(self, batch, batch_nb):
@@ -293,4 +376,5 @@ if __name__ == "__main__":
     hparams = {}
     net = PointNet(hparams)
     y = net._forward(x)[0]
+    plot_grad_flow(net.named_parameters())
     pdb.set_trace()

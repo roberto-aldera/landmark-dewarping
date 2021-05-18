@@ -22,13 +22,21 @@ ARCHITECTURE_TYPE = "pointnet"
 # Training parameters
 NUM_CPUS = 8
 MAX_EPOCHS = 5
-LEARNING_RATE = 1e-6
+LEARNING_RATE = 1e-3
 BATCH_SIZE = 32
+WEIGHT_INIT_VAL = 1e-6
 
 # Bools
 IS_RUNNING_ON_SERVER = False
-DO_PLOTS_IN_LOSS = False
-DO_PLOTS_IN_FORWARD_PASS = False
+
+if IS_RUNNING_ON_SERVER:
+    DO_PLOTS_IN_LOSS = False
+    DO_PLOTS_IN_FORWARD_PASS = False
+    DO_GRADIENT_PLOTS = False
+else:
+    DO_PLOTS_IN_LOSS = False
+    DO_PLOTS_IN_FORWARD_PASS = True
+    DO_GRADIENT_PLOTS = False
 
 if IS_RUNNING_ON_SERVER is True:
     ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"
@@ -42,3 +50,4 @@ else:
     RESULTS_DIR = ROOT_DIR + "evaluation/"
 
 PLOTTING_ITR = 0
+GRAD_PLOTTING_ITR = 0
