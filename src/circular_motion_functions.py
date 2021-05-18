@@ -23,86 +23,39 @@ class CircularMotionEstimationBase(torch.nn.Module):
 
     def forward(self, x):
         # get range, bearing for each match
-        ranges, bearings, validity_mask = self.get_ranges_and_bearings_from_cartesian(x)
+        ranges, bearings = self.get_ranges_and_bearings_from_cartesian(x)
         # get theta, curvature for each range, bearing pair
         thetas, curvatures = self.get_thetas_and_curvatures_from_ranges_and_bearings(ranges, bearings)
-        # pdb.set_trace()
-        # pick theta (and its curvature) based on some heuristic (median)
-        # theta_estimate, curvature_estimate = self.select_theta_and_curvature(thetas, curvatures, validity_mask)
-        # pdb.set_trace()
-        # return torch.cat([theta_estimate, curvature_estimate], dim=1)  # dimensions here still TBD
         # TODO -> returning all thetas and curvatures breaks things that are expecting single values
         return torch.cat([thetas, curvatures], dim=2)  # dimensions here still TBD
 
     def get_ranges_and_bearings_from_cartesian(self, x):
-        validity_mask = torch.zeros(x.shape[0:2])
-        for batch_idx in range(x.shape[0]):
-            valid_cols = [col_idx for col_idx, col in enumerate(torch.split(x[batch_idx], 1, dim=0)) if
-                          not torch.all(col == 0)]
-            validity_mask[batch_idx, valid_cols] = 1
-
         y2, y1, x2, x1 = torch.split(x, 1, dim=2)
         r1 = torch.norm(torch.cat([x1, y1], dim=2), dim=2, keepdim=True)
         r2 = torch.norm(torch.cat([x2, y2], dim=2), dim=2, keepdim=True)
         a1 = torch.atan2(y1, x1)
         a2 = torch.atan2(y2, x2)
-        return torch.cat([r1, r2], dim=2), torch.cat([a1, a2], dim=2), validity_mask  # we want 2, 10, 2
+        return torch.cat([r1, r2], dim=2), torch.cat([a1, a2], dim=2)  # we want 2, 10, 2
 
     def get_thetas_and_curvatures_from_ranges_and_bearings(self, ranges, bearings):
         r1, r2 = torch.split(ranges, 1, dim=2)
         a1, a2 = torch.split(bearings, 1, dim=2)
         # Keep track of when landmarks are in the exact same position as their match (stationary vehicle)
         stationary_landmark_mask = (r1 == r2) & (a1 == a2)
+        # Need to check if any other denominators could contain zero
+        # For theta: ((r1 / r2) * torch.cos(a1) + torch.cos(a2))) -> not yet encountered (or handled)
 
         thetas = 2 * torch.atan(
             (-torch.sin(a2) + (r1 / r2) * torch.sin(a1)) / ((r1 / r2) * torch.cos(a1) + torch.cos(a2)))
-        radii = (r2 * torch.sin(a1 - a2 - thetas)) / (2 * torch.sin(thetas / 2) * torch.sin(-a1 + (thetas / 2)))
+
+        # For radii: (2 * torch.sin(thetas / 2) * torch.sin(-a1 + (thetas / 2)))
+        # radii = torch.full(thetas.shape, float('inf'))  # gives us a starting point
+        denominator = (2 * torch.sin(thetas / 2) * torch.sin(-a1 + (thetas / 2)))
+        denominator[denominator == 0] = 1e-9  # set to a tiny number for now
+        radii = (r2 * torch.sin(a1 - a2 - thetas)) / denominator
         radii.masked_fill_(stationary_landmark_mask, float('inf'))
         curvatures = 1 / radii  # division by zero becomes inf, that's what we expect
         return thetas, curvatures
-
-    def select_theta_and_curvature(self, thetas, curvatures, validity_mask):
-        theta_estimates, curvature_estimates = [], []
-        for batch_idx in range(thetas.shape[0]):
-            # Mask out the padding
-            valid_thetas = torch.tensor(
-                [item for idx, item in enumerate(thetas[batch_idx, :]) if validity_mask[batch_idx, idx] == 1])
-            valid_curvatures = torch.tensor(
-                [item for idx, item in enumerate(curvatures[batch_idx, :]) if validity_mask[batch_idx, idx] == 1])
-            # Might replace this going forward and use the mask (or some sort of weighted score) to pick theta
-            theta_estimate, median_index = torch.median(valid_thetas, dim=0)
-            # Pick the curvature that corresponds to the median theta in each batch
-            curvature_estimate = valid_curvatures[median_index]
-            theta_estimates.append(theta_estimate)
-            curvature_estimates.append(curvature_estimate)
-        return torch.tensor(theta_estimates, requires_grad=True).view(thetas.shape[0], -1), \
-               torch.tensor(curvature_estimates, requires_grad=True).view(thetas.shape[0], -1)
-
-    def select_theta_and_curvature_with_iqr(self, thetas, curvatures, validity_mask):
-        theta_estimates, curvature_estimates = [], []
-        for batch_idx in range(thetas.shape[0]):
-            # Mask out the padding
-            valid_thetas = torch.tensor(
-                [item for idx, item in enumerate(thetas[batch_idx, :]) if validity_mask[batch_idx, idx] == 1])
-            valid_curvatures = torch.tensor(
-                [item for idx, item in enumerate(curvatures[batch_idx, :]) if validity_mask[batch_idx, idx] == 1])
-            # Might replace this going forward and use the mask (or some sort of weighted score) to pick theta
-            # Find quantiles
-            quantiles = torch.tensor([0.25, 0.75])
-            theta_quantiles = torch.quantile(valid_thetas, quantiles.double())
-            iqr_thetas_indices = ((valid_thetas >= theta_quantiles[0]) & (valid_thetas <= theta_quantiles[1])).nonzero()
-            iqr_thetas = valid_thetas[(valid_thetas >= theta_quantiles[0]) & (valid_thetas <= theta_quantiles[1])]
-            # Find the median in this IQR
-            _, iqr_median_index = torch.median(iqr_thetas, dim=0)
-
-            # Find the index in the bigger set corresponding to this median index
-            median_index = iqr_thetas_indices[iqr_median_index]
-            theta_estimate = valid_thetas[median_index]
-            curvature_estimate = valid_curvatures[median_index]
-            theta_estimates.append(theta_estimate)
-            curvature_estimates.append(curvature_estimate)
-        return torch.tensor(theta_estimates, requires_grad=True).view(thetas.shape[0], -1), \
-               torch.tensor(curvature_estimates, requires_grad=True).view(thetas.shape[0], -1)
 
 
 def get_transform_by_translation_and_theta(translation_x, translation_y, theta):
