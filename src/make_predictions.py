@@ -143,15 +143,20 @@ def do_quick_plot_from_csv_files(gt_csv_file, raw_csv_file, pred_csv_file):
     dim = settings.TOTAL_SAMPLES + 50
     plt.xlim(0, dim)
     plt.grid()
-    plt.plot(np.array(gt_x_y_th[0]), '+-', label="dx_gt")
-    # plt.plot(np.array(gt_x_y_th[1]), '+-', label="dy_gt")
-    # plt.plot(np.array(gt_x_y_th[2]), '+-', label="dth_gt")
-    plt.plot(np.array(raw_x_y_th[0]), '+-', label="dx_raw")
-    # plt.plot(np.array(raw_x_y_th[1]), '+-', label="dy_raw")
-    # plt.plot(np.array(raw_x_y_th[2]), '+-', label="dth_raw")
-    plt.plot(np.array(pred_x_y_th[0]), '+-', label="dx_pred")
-    # plt.plot(np.array(pred_x_y_th[1]), '+-', label="dy_pred")
-    # plt.plot(np.array(pred_x_y_th[2]), '+-', label="dth_pred")
+    m_size = 5
+    line_width = 0.5
+    plt.plot(np.array(gt_x_y_th[0]), 'b+-', linewidth=line_width, markersize=m_size, mew=0.3, label="dx_gt")
+    plt.plot(np.array(gt_x_y_th[1]), 'bx-', linewidth=line_width, markersize=m_size, mew=0.3, label="dy_gt")
+    plt.plot(np.array(gt_x_y_th[2]), 'bo-', linewidth=line_width, markersize=m_size, mew=0.3, fillstyle="none",
+             label="dth_gt")
+    plt.plot(np.array(raw_x_y_th[0]), 'r+-', linewidth=line_width, markersize=m_size, mew=0.3, label="dx_raw")
+    plt.plot(np.array(raw_x_y_th[1]), 'rx-', linewidth=line_width, markersize=m_size, mew=0.3, label="dy_raw")
+    plt.plot(np.array(raw_x_y_th[2]), 'ro-', linewidth=line_width, markersize=m_size, mew=0.3, fillstyle="none",
+             label="dth_raw")
+    plt.plot(np.array(pred_x_y_th[0]), 'g+-', linewidth=line_width, markersize=m_size, mew=0.3, label="dx_pred")
+    plt.plot(np.array(pred_x_y_th[1]), 'gx-', linewidth=line_width, markersize=m_size, mew=0.3, label="dy_pred")
+    plt.plot(np.array(pred_x_y_th[2]), 'go-', linewidth=line_width, markersize=m_size, mew=0.3, fillstyle="none",
+             label="dth_pred")
     plt.title("Pose estimates")
     plt.xlabel("Sample index")
     plt.ylabel("units/sample")

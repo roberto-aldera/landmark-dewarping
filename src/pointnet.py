@@ -14,7 +14,7 @@ from torch.autograd import Variable
 import pytorch_lightning as pl
 import settings
 from circular_motion_functions import CircularMotionEstimationBase
-from loss_functions import LossFunctionOnTheta
+from loss_functions import LossFunctionFinalPose
 from argparse import ArgumentParser
 import pdb
 
@@ -170,7 +170,7 @@ class PointNet(pl.LightningModule):
                                  nn.ReLU(), self.conv4)
 
         self.cme = CircularMotionEstimationBase()
-        self.loss = LossFunctionOnTheta(self.device)
+        self.loss = LossFunctionFinalPose(self.device)
 
         self._initialise_weights()
 

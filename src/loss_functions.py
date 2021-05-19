@@ -7,7 +7,55 @@ import torch.nn.functional as F
 import settings
 
 
-# TODO - Make a loss on final pose.
+class LossFunctionFinalPose(nn.Module):
+    def __init__(self, device):
+        super().__init__()
+        self.device = device
+
+    def forward(self, estimate, target):
+        b, _, _ = estimate.shape
+
+        # Use thetas as a proxy for "best" matches (based on how well they are supported)
+        estimated_thetas = estimate[:, :, 0].to(self.device)
+        b, n, _ = estimate.shape
+        mask = torch.zeros(b, n, 3)
+        quantiles = torch.tensor([0.1, 0.9]).to(self.device)
+        theta_quantiles = torch.quantile(estimated_thetas, quantiles, dim=1).transpose(0, 1)
+        mask[(estimated_thetas > theta_quantiles[:, 0].unsqueeze(1)) & (
+                estimated_thetas < theta_quantiles[:, 1].unsqueeze(1))] = 1
+
+        # Convert target to x, y, theta
+        gt_theta = target[:, 0]
+        gt_radius = 1 / target[:, 1]  # TODO: handle case where curvature could be zero (not yet observed)
+
+        phi = gt_theta / 2  # this is because we're enforcing circular motion
+        rho = 2 * gt_radius * torch.sin(phi)
+        d_x = rho * torch.cos(phi)  # forward motion
+        d_y = rho * torch.sin(phi)  # lateral motion
+        d_theta = target[:, 0]
+
+        pose_target = torch.stack((d_x, d_y, d_theta), dim=1)
+        pose_target = pose_target.float().to(self.device)
+        _, n = estimated_thetas.shape
+        pose_target = torch.tile(pose_target.unsqueeze(1), (1, n, 1))
+
+        # Convert estimates to x, y, theta
+        estimated_curvatures = estimate[:, :, 1]
+        estimated_curvatures[estimated_curvatures == 0] = 1e-9
+        estimated_radii = torch.reciprocal(estimated_curvatures).to(self.device)
+        phi = estimated_thetas / 2  # this is because we're enforcing circular motion
+        rho = 2 * estimated_radii * torch.sin(phi)
+        d_x = rho * torch.cos(phi)  # forward motion
+        d_y = rho * torch.sin(phi)  # lateral motion
+        pose_estimate = torch.stack((d_x, d_y, estimated_thetas), dim=2)
+
+        loss = F.mse_loss(pose_estimate, pose_target, reduction="none")
+        loss = loss * mask
+        loss = loss.mean()
+        # I wonder if this is too simple, as the values that were masked still add to the number of elements to find
+        # the mean over
+        return loss
+
 
 class LossFunctionCMParameters(nn.Module):
     def __init__(self, device):
@@ -25,7 +73,7 @@ class LossFunctionCMParameters(nn.Module):
 
         target = target.float()
         _, n = estimated_thetas.shape
-        target = torch.tile(target.unsqueeze(1), (1, n, 1))
+        target = torch.tile(target.unsqueeze(1), (1, n, 1))  # TODO: check this, might be different from theta-only case
         loss = F.mse_loss(estimate, target, reduction="none")
         loss = loss * mask
         loss = loss.mean()
