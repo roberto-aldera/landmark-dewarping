@@ -58,7 +58,8 @@ class CircularMotionEstimationBase(torch.nn.Module):
         denominator[denominator == 0] = 1e-9  # set to a tiny number for now
         radii = (r2 * torch.sin(a1 - a2 - thetas)) / denominator
         radii.masked_fill_(stationary_landmark_mask, float('inf'))
-        curvatures = 1 / radii  # division by zero becomes inf, that's what we expect
+        radii[radii == 0] = 1e-9  # set to a tiny number for observed instances where there are some zeros present
+        curvatures = torch.reciprocal(radii)
         return thetas, curvatures
 
 

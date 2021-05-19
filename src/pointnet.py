@@ -1,5 +1,6 @@
 # Source of original template compiled from here: https://github.com/yanx27/Pointnet_Pointnet2_pytorch
 import numpy as np
+import math
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
@@ -71,14 +72,6 @@ class STNkd(nn.Module):  # Spatial Transformer Network
 
         self.k = k
 
-        # initialise weights
-        # nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
-        # nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
-        # nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
-        # nn.init.constant_(self.fc1.weight, settings.WEIGHT_INIT_VAL)
-        # nn.init.constant_(self.fc2.weight, settings.WEIGHT_INIT_VAL)
-        # nn.init.constant_(self.fc3.weight, settings.WEIGHT_INIT_VAL)
-
     def forward(self, x):
         batchsize = x.size()[0]
         x = F.relu(self.bn1(self.conv1(x)))
@@ -114,11 +107,6 @@ class PointNetEncoder(nn.Module):
         self.feature_transform = feature_transform
         if self.feature_transform:
             self.fstn = STNkd(k=64)
-
-        # initialise weights
-        # nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
-        # nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
-        # nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
 
     def forward(self, x):
         B, D, N = x.size()
@@ -157,7 +145,7 @@ def loss_function(self, estimate, target):
     b, _, _ = estimate.shape
     estimated_thetas = estimate[:, :, 0]
     mask = torch.zeros_like(estimated_thetas)
-    quantiles = torch.tensor([0.25, 0.75]).to(self.device)
+    quantiles = torch.tensor([0.1, 0.9]).to(self.device)
     theta_quantiles = torch.quantile(estimated_thetas, quantiles, dim=1).transpose(0, 1)
     mask[(estimated_thetas > theta_quantiles[:, 0].unsqueeze(1)) & (
             estimated_thetas < theta_quantiles[:, 1].unsqueeze(1))] = 1
@@ -226,21 +214,31 @@ class PointNet(pl.LightningModule):
         self.bn1 = nn.BatchNorm1d(512)
         self.bn2 = nn.BatchNorm1d(256)
         self.bn3 = nn.BatchNorm1d(128)
-        self.tanh = weightedTanh()
+        # self.tanh = weightedTanh()
         self.net = nn.Sequential(self.conv1, self.bn1, nn.ReLU(), self.conv2, self.bn2, nn.ReLU(), self.conv3, self.bn3,
-                                 nn.ReLU(), self.conv4, self.tanh)
+                                 nn.ReLU(), self.conv4)
 
         self.cme = CircularMotionEstimationBase()
 
-        # initialise weights
-        # nn.init.constant_(self.conv1.weight, settings.WEIGHT_INIT_VAL)
-        # nn.init.constant_(self.conv2.weight, settings.WEIGHT_INIT_VAL)
-        # nn.init.constant_(self.conv3.weight, settings.WEIGHT_INIT_VAL)
-        # nn.init.constant_(self.conv4.weight, settings.WEIGHT_INIT_VAL)
+        self._initialise_weights()
+
+    def _initialise_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv1d):
+                n = m.kernel_size[0] * m.in_channels
+                m.weight.data.normal_(0, 0.5 / math.sqrt(n))
+                if m.bias is not None:
+                    m.bias.data.zero_()
+
+            elif isinstance(m, nn.BatchNorm1d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
+        # Initialise last conv weights to 0 to ensure the initial correction is zero/small (?)
+        self.net[-1].weight.data.zero_()
 
     def _forward(self, x):
         b, n, c = x.shape
-        # pdb.set_trace()
         x = x.transpose(1, 2).float()
         landmark_positions = x.float()
         x, _ = self.feat(x)
@@ -249,12 +247,6 @@ class PointNet(pl.LightningModule):
         x = x.view(b, n, self.k)
 
         prediction_set = torch.zeros(b, n, c).to(self.device)
-        # Perhaps set minimum prediction gate here
-        # min_correction = 0.0004
-        # too_tiny_0 = torch.where(x[:, :, 0].abs() < min_correction)
-        # too_tiny_1 = torch.where(x[:, :, 1].abs() < min_correction)
-        # x[:, too_tiny_0[1], 0] = 0
-        # x[:, too_tiny_1[1], 1] = 0
         prediction_set[:, :, 1] = x[:, :, 0]
         prediction_set[:, :, 3] = x[:, :, 1]
 
@@ -263,8 +255,10 @@ class PointNet(pl.LightningModule):
             plt.figure(figsize=(10, 10))
             plt.grid()
             plt.title("Corrections in x and y position of each landmark")
-            plt.plot(np.array(x[:, :, 0].squeeze(0).detach().numpy()), 'rx', markersize=2, mew=0.3, label="0s")
-            plt.plot(np.array(x[:, :, 1].squeeze(0).detach().numpy()), 'b+', markersize=2, mew=0.3, label="1s")
+            plt.plot(np.array(x[:, :, 0].squeeze(0).detach().numpy()), 'rx', markersize=2, mew=0.3,
+                     label="y-correction")
+            plt.plot(np.array(x[:, :, 1].squeeze(0).detach().numpy()), 'b+', markersize=2, mew=0.3,
+                     label="x-correction")
             plt.savefig("%s%s%i%s" % (
                 settings.RESULTS_DIR, "corrections/", settings.CORRECTION_PLOTTING_ITR, "_corrections.pdf"))
             plt.close()
