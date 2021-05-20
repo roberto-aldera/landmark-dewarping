@@ -58,7 +58,7 @@ def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=Tr
     raw_SVD_results = []
     dewarped_SVD_results = []
     num_samples = len(data_loader.dataset)  # settings.TOTAL_SAMPLES
-    quantile_width = 0.99
+    quantile_width = 0.5
     quantiles = torch.tensor([0.5 - quantile_width / 2, 0.5 + quantile_width / 2], dtype=torch.float32)
 
     for i in tqdm(range(num_samples)):
@@ -70,7 +70,7 @@ def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=Tr
 
         # Grab indices where theta is in a certain acceptable range
         theta_quantiles = torch.quantile(raw_thetas, quantiles)
-        inlier_indices = torch.where((raw_thetas > theta_quantiles[0]) & (raw_thetas < theta_quantiles[1]))
+        inlier_indices = torch.where((raw_thetas >= theta_quantiles[0]) & (raw_thetas <= theta_quantiles[1]))
         inlier_landmarks = torch.index_select(landmarks * settings.MAX_LANDMARK_RANGE_METRES, 1,
                                               inlier_indices[0]).squeeze(0)
         # Then find SVD motion using landmark matches corresponding to these indices
