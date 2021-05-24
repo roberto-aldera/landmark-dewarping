@@ -18,20 +18,23 @@ def get_metrics(params):
 
     # Pose estimates from full matches
     full_matches_timestamps, full_matches_x_y_th = get_timestamps_and_x_y_th_from_csv(
-        params.path + "6900_full_matches_poses.csv")
+        "/workspace/data/landmark-dewarping/metrics/6900_full_matches_poses.csv")
 
     # Aux 0 - TODO: bring timestamps back.
     _, aux0_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
-        params.path + "6000_raw_cm_means_poses.csv")
+        params.path + "raw_cm_poses.csv")
 
     # Aux 1 - TODO: bring timestamps back.
     _, aux1_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
-        params.path + "6000_cm-pred_poses.csv")
+        params.path + "corrections_cm_poses.csv")
 
     # Cropping if necessary
     full_matches_timestamps, full_matches_x_y_th = full_matches_timestamps[:settings.TOTAL_SAMPLES], \
                                                    full_matches_x_y_th[:settings.TOTAL_SAMPLES]
     # aux0_timestamps, aux0_x_y_th = aux0_timestamps[:2000], aux0_x_y_th[:2000]
+
+    # Just a sanity check here
+    do_quick_debugging_plot(aux0_x_y_th, aux1_x_y_th)
 
     full_matches_se3s = get_raw_se3s_from_x_y_th(full_matches_x_y_th)
     aux0_se3s = get_raw_se3s_from_x_y_th(aux0_x_y_th)
@@ -66,8 +69,8 @@ def get_metrics(params):
         aux1_global_se3s.append(aux1_global_se3s[i - 1] @ aux1_se3s[i])
     aux1_global_SE3s = get_se3s_from_raw_se3s(aux1_global_se3s)
 
-    segment_lengths = [100, 200, 300, 400, 500, 600, 700, 800]
-    # segment_lengths = [50, 100, 150]
+    # segment_lengths = [100, 200, 300, 400, 500, 600, 700, 800]
+    segment_lengths = [50, 100, 150]
 
     tm_gt_fullmatches = TrajectoryMetrics(gt_global_SE3s, full_matches_global_SE3s)
     print_trajectory_metrics(tm_gt_fullmatches, segment_lengths, data_name="full match")
@@ -178,6 +181,52 @@ def get_raw_se3s_from_x_y_th(x_y_th):
         pose[1, 3] = float(sample[1])
         se3s.append(pose)
     return se3s
+
+
+def do_quick_debugging_plot(aux0_x_y_th, aux1_x_y_th):
+    x0 = []
+    y0 = []
+    th0 = []
+    for sample in aux0_x_y_th:
+        x0.append(float(sample[0]))
+        y0.append(float(sample[1]))
+        th0.append(float(sample[2]))
+
+    x1 = []
+    y1 = []
+    th1 = []
+    for sample in aux1_x_y_th:
+        x1.append(float(sample[0]))
+        y1.append(float(sample[1]))
+        th1.append(float(sample[2]))
+
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(15, 5))
+    dim = settings.TOTAL_SAMPLES + 50
+    plt.xlim(0, 200)
+    plt.grid()
+    m_size = 5
+    line_width = 0.5
+    # plt.plot(np.array(gt_x_y_th[0]), 'b+-', linewidth=line_width, markersize=m_size, mew=0.3, label="dx_gt")
+    # plt.plot(np.array(gt_x_y_th[1]), 'bx-', linewidth=line_width, markersize=m_size, mew=0.3, label="dy_gt")
+    # plt.plot(np.array(gt_x_y_th[2]), 'bo-', linewidth=line_width, markersize=m_size, mew=0.3, fillstyle="none",
+    #          label="dth_gt")
+    plt.plot(np.array(x0), 'r+-', linewidth=line_width, markersize=m_size, mew=0.3, label="dx_raw")
+    plt.plot(np.array(y0), 'rx-', linewidth=line_width, markersize=m_size, mew=0.3, label="dy_raw")
+    plt.plot(np.array(th0), 'ro-', linewidth=line_width, markersize=m_size, mew=0.3, fillstyle="none",
+             label="dth_raw")
+    plt.plot(np.array(x1), 'g+-', linewidth=line_width, markersize=m_size, mew=0.3, label="dx_pred")
+    plt.plot(np.array(y1), 'gx-', linewidth=line_width, markersize=m_size, mew=0.3, label="dy_pred")
+    plt.plot(np.array(th1), 'go-', linewidth=line_width, markersize=m_size, mew=0.3, fillstyle="none",
+             label="dth_pred")
+    plt.title("Pose estimates")
+    plt.xlabel("Sample index")
+    plt.ylabel("units/sample")
+    plt.legend()
+    quick_figure_for_debugging_path = "%s%s" % (settings.RESULTS_DIR, "quick_check_pose_predictions_comparison.pdf")
+    plt.savefig(quick_figure_for_debugging_path)
+    plt.close()
+    print("Saved figure to:", quick_figure_for_debugging_path)
 
 
 def main():
