@@ -55,11 +55,11 @@ def debugging_with_plots(model, data_loader):
 
 
 def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=True):
-    raw_SVD_results = []
-    dewarped_SVD_results = []
+    raw_pose_results = []
+    dewarped_pose_results = []
     num_samples = len(data_loader.dataset)  # settings.TOTAL_SAMPLES
     quantile_width = 0.5
-    quantiles = torch.tensor([0.5 - quantile_width / 2, 0.5 + quantile_width / 2], dtype=torch.float32)
+    quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
 
     for i in tqdm(range(num_samples)):
         landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
@@ -67,56 +67,74 @@ def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=Tr
         cme_function = CircularMotionEstimationBase()
         raw_CMEs = cme_function(landmarks * settings.MAX_LANDMARK_RANGE_METRES).squeeze(0)
         raw_thetas = raw_CMEs[:, 0].type(torch.FloatTensor)
+        raw_curvatures = raw_CMEs[:, 1].type(torch.FloatTensor)
 
         # Grab indices where theta is in a certain acceptable range
         theta_quantiles = torch.quantile(raw_thetas, quantiles)
         inlier_indices = torch.where((raw_thetas >= theta_quantiles[0]) & (raw_thetas <= theta_quantiles[1]))
-        inlier_landmarks = torch.index_select(landmarks * settings.MAX_LANDMARK_RANGE_METRES, 1,
-                                              inlier_indices[0]).squeeze(0)
-        # Then find SVD motion using landmark matches corresponding to these indices
-        P1 = np.transpose(np.column_stack((inlier_landmarks[:, 0], inlier_landmarks[:, 2])))
-        P2 = np.transpose(np.column_stack((inlier_landmarks[:, 1], inlier_landmarks[:, 3])))
-        v, theta_R = get_motion_estimate_from_svd(P1, P2, weights=np.ones(P1.shape[1]))
-        raw_SVD_results.append([v[1], v[0], -theta_R])
+
+        # Find dx, dy, dth for these indices
+        selected_thetas = raw_thetas[inlier_indices]
+        selected_radii = 1 / raw_curvatures[inlier_indices].type(torch.FloatTensor)
+
+        phi = selected_thetas / 2  # this is because we're enforcing circular motion
+        rho = 2 * selected_radii * torch.sin(phi)
+        d_x = rho * torch.cos(phi)  # forward motion
+        d_y = rho * torch.sin(phi)  # lateral motion
+        # Special cases
+        d_x[selected_radii == float('inf')] = 0
+        d_y[selected_radii == float('inf')] = 0
+
+        final_pose = [d_x.mean().detach().numpy(), d_y.mean().detach().numpy(), selected_thetas.mean().detach().numpy()]
+        raw_pose_results.append(final_pose)
 
         # Get Circular Motion Estimates from from landmarks that have been corrected by network
         prediction, corrected_landmarks = model(landmarks)
-        corrected_landmarks = corrected_landmarks.detach().squeeze(0)
         prediction = prediction.detach().squeeze(0)
-        dewarped_thetas = prediction[:, 1]
+        dewarped_thetas = prediction[:, 0]
+        dewarped_curvatures = prediction[:, 1]
 
         # Grab indices where theta is in a certain acceptable range
         theta_quantiles = torch.quantile(dewarped_thetas, quantiles)
         inlier_indices = torch.where((dewarped_thetas > theta_quantiles[0]) & (dewarped_thetas < theta_quantiles[1]))
-        inlier_landmarks = torch.index_select(corrected_landmarks, 0, inlier_indices[0]).squeeze(0)
-        # Then find SVD motion using landmark matches corresponding to these indices
-        P1 = np.transpose(np.column_stack((inlier_landmarks[:, 0], inlier_landmarks[:, 2])))
-        P2 = np.transpose(np.column_stack((inlier_landmarks[:, 1], inlier_landmarks[:, 3])))
-        v, theta_R = get_motion_estimate_from_svd(P1, P2, weights=np.ones(P1.shape[1]))
-        dewarped_SVD_results.append([v[1], v[0], -theta_R])
+        # Find dx, dy, dth for these indices
+        selected_thetas = dewarped_thetas[inlier_indices]
+        selected_radii = 1 / dewarped_curvatures[inlier_indices].type(torch.FloatTensor)
+
+        phi = selected_thetas / 2  # this is because we're enforcing circular motion
+        rho = 2 * selected_radii * torch.sin(phi)
+        d_x = rho * torch.cos(phi)  # forward motion
+        d_y = rho * torch.sin(phi)  # lateral motion
+        # Special cases
+        d_x[selected_radii == float('inf')] = 0
+        d_y[selected_radii == float('inf')] = 0
+
+        final_pose = [d_x.mean().detach().numpy(), d_y.mean().detach().numpy(), selected_thetas.mean().detach().numpy()]
+        dewarped_pose_results.append(final_pose)
 
     # Get poses from raw CMEs
     raw_motion_estimates = []
-    for idx in range(len(raw_SVD_results)):
-        x_est = raw_SVD_results[idx][0]
-        y_est = raw_SVD_results[idx][1]
-        th_est = raw_SVD_results[idx][2]
+    for idx in range(len(raw_pose_results)):
+        x_est = raw_pose_results[idx][0]
+        y_est = raw_pose_results[idx][1]
+        th_est = raw_pose_results[idx][2]
         raw_motion_estimates.append(
             MotionEstimate(theta=0, curvature=0, dx=x_est, dy=y_est, dth=th_est))
     if do_csv_export:
-        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(raw_SVD_results)), motion_estimates=raw_motion_estimates,
+        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(raw_pose_results)),
+                                       motion_estimates=raw_motion_estimates,
                                        pose_source="raw_cm-pred", export_folder=settings.RESULTS_DIR)
 
     # Get poses from predicted correction CMEs
     motion_estimates = []
-    for idx in range(len(dewarped_SVD_results)):
-        x_est = dewarped_SVD_results[idx][0]
-        y_est = dewarped_SVD_results[idx][1]
-        th_est = dewarped_SVD_results[idx][2]
+    for idx in range(len(dewarped_pose_results)):
+        x_est = dewarped_pose_results[idx][0]
+        y_est = dewarped_pose_results[idx][1]
+        th_est = dewarped_pose_results[idx][2]
         motion_estimates.append(
             MotionEstimate(theta=0, curvature=0, dx=x_est, dy=y_est, dth=th_est))
     if do_csv_export:
-        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(dewarped_SVD_results)),
+        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(dewarped_pose_results)),
                                        motion_estimates=motion_estimates,
                                        pose_source="cm-pred", export_folder=settings.RESULTS_DIR)
 
@@ -176,6 +194,7 @@ if __name__ == "__main__":
     params = parser.parse_args()
 
     # Prepare model for evaluation
+    # path_to_model = "/workspace/data/landmark-dewarping/models/pointnetv151.ckpt"
     path_to_model = "%s%s%s" % (settings.MODEL_DIR, params.model_name, ".ckpt")
     # path_to_model = "/workspace/data/scratchdata/landmark-dewarping/models/pointnet.ckpt"
 
