@@ -43,13 +43,10 @@ class CircularMotionEstimationBase(torch.nn.Module):
         # Keep track of when landmarks are in the exact same position as their match (stationary vehicle)
         stationary_landmark_mask = (r1 == r2) & (a1 == a2)
         # Need to check if any other denominators could contain zero
-        # For theta: ((r1 / r2) * torch.cos(a1) + torch.cos(a2))) -> not yet encountered (or handled)
+        # For theta: ((r1 / r2) * torch.cos(a1) + torch.cos(a2))) -> this has happened.
         theta_denominator = (r1 / r2) * torch.cos(a1) + torch.cos(a2)
-        if (theta_denominator == 0).any():
-            pdb.set_trace()
-
-        thetas = 2 * torch.atan(
-            (-torch.sin(a2) + (r1 / r2) * torch.sin(a1)) / ((r1 / r2) * torch.cos(a1) + torch.cos(a2)))
+        theta_denominator[theta_denominator == 0] = 1e-9
+        thetas = 2 * torch.atan((-torch.sin(a2) + (r1 / r2) * torch.sin(a1)) / theta_denominator)
 
         # For radii: (2 * torch.sin(thetas / 2) * torch.sin(-a1 + (thetas / 2)))
         # radii = torch.full(thetas.shape, float('inf'))  # gives us a starting point
