@@ -22,14 +22,15 @@ def get_metrics(params):
 
     # Aux 0 - TODO: bring timestamps back.
     _, aux0_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
-        params.path + "raw_cm-pred_poses.csv")
+        params.path + "6000_raw_cm_means_poses.csv")
 
     # Aux 1 - TODO: bring timestamps back.
     _, aux1_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
-        params.path + "cm-pred_poses.csv")
+        params.path + "6000_cm-pred_poses.csv")
 
     # Cropping if necessary
-    full_matches_timestamps, full_matches_x_y_th = full_matches_timestamps[:2000], full_matches_x_y_th[:2000]
+    full_matches_timestamps, full_matches_x_y_th = full_matches_timestamps[:settings.TOTAL_SAMPLES], \
+                                                   full_matches_x_y_th[:settings.TOTAL_SAMPLES]
     # aux0_timestamps, aux0_x_y_th = aux0_timestamps[:2000], aux0_x_y_th[:2000]
 
     full_matches_se3s = get_raw_se3s_from_x_y_th(full_matches_x_y_th)
@@ -65,8 +66,8 @@ def get_metrics(params):
         aux1_global_se3s.append(aux1_global_se3s[i - 1] @ aux1_se3s[i])
     aux1_global_SE3s = get_se3s_from_raw_se3s(aux1_global_se3s)
 
-    # segment_lengths = [100, 200, 300, 400, 500, 600, 700, 800]
-    segment_lengths = [50, 100, 150]
+    segment_lengths = [100, 200, 300, 400, 500, 600, 700, 800]
+    # segment_lengths = [50, 100, 150]
 
     tm_gt_fullmatches = TrajectoryMetrics(gt_global_SE3s, full_matches_global_SE3s)
     print_trajectory_metrics(tm_gt_fullmatches, segment_lengths, data_name="full match")
