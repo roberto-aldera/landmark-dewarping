@@ -22,13 +22,13 @@ ARCHITECTURE_TYPE = "pointnet"
 # Training parameters
 NUM_CPUS = 8
 MAX_EPOCHS = 5
-LEARNING_RATE = 1e-5
-BATCH_SIZE = 64
+LEARNING_RATE = 1e-6
+BATCH_SIZE = 128
 
 # Metrics
 K_RADAR_INDEX_OFFSET = 0
-AUX0_NAME = "aux0"
-AUX1_NAME = "aux1"
+AUX0_NAME = "CME-means"
+AUX1_NAME = "Corrected-landmarks"
 
 # Bools
 IS_RUNNING_ON_SERVER = False

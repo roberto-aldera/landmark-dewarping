@@ -16,6 +16,7 @@ import torch
 import settings
 import pdb
 import csv
+import time
 
 
 def debugging_with_plots(model, data_loader):
@@ -54,7 +55,7 @@ def debugging_with_plots(model, data_loader):
     print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "thetas.pdf"))
 
 
-def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=True):
+def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_csv_export=True):
     raw_pose_results = []
     dewarped_pose_results = []
     num_samples = len(data_loader.dataset)  # settings.TOTAL_SAMPLES
@@ -123,7 +124,7 @@ def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=Tr
     if do_csv_export:
         save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(raw_pose_results)),
                                        motion_estimates=raw_motion_estimates,
-                                       pose_source="raw_cm-pred", export_folder=settings.RESULTS_DIR)
+                                       pose_source="raw_cm", export_folder=export_path)
 
     # Get poses from predicted correction CMEs
     motion_estimates = []
@@ -136,7 +137,7 @@ def do_prediction_and_optionally_export_csv(model, data_loader, do_csv_export=Tr
     if do_csv_export:
         save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(dewarped_pose_results)),
                                        motion_estimates=motion_estimates,
-                                       pose_source="cm-pred", export_folder=settings.RESULTS_DIR)
+                                       pose_source="corrections_cm", export_folder=export_path)
 
 
 def get_data_from_csv(csv_file):
@@ -151,7 +152,7 @@ def get_data_from_csv(csv_file):
     return [dx, dy, dth]
 
 
-def do_quick_plot_from_csv_files(gt_csv_file, raw_csv_file, pred_csv_file):
+def do_quick_plot_from_csv_files(gt_csv_file, raw_csv_file, pred_csv_file, export_path):
     # Read in CSVs for comparison
     gt_x_y_th = get_data_from_csv(gt_csv_file)
     raw_x_y_th = get_data_from_csv(raw_csv_file)
@@ -179,13 +180,15 @@ def do_quick_plot_from_csv_files(gt_csv_file, raw_csv_file, pred_csv_file):
     plt.xlabel("Sample index")
     plt.ylabel("units/sample")
     plt.legend()
-    plt.savefig("%s%s" % (settings.RESULTS_DIR, "pose_predictions_comparison.pdf"))
+    plt.savefig("%s%s" % (export_path, "pose_predictions_comparison.pdf"))
     plt.close()
-    print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "pose_predictions_comparison.pdf"))
+    print("Saved figure to:", "%s%s" % (export_path, "pose_predictions_comparison.pdf"))
 
 
 if __name__ == "__main__":
-    Path(settings.RESULTS_DIR).mkdir(parents=True, exist_ok=True)
+    current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
+    results_path = settings.RESULTS_DIR + "/" + current_time + "/"
+    Path(results_path).mkdir(parents=True, exist_ok=True)
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--model_name', type=str, default=settings.ARCHITECTURE_TYPE, help='cmnet or...')
 
@@ -211,7 +214,8 @@ if __name__ == "__main__":
                              shuffle=False, num_workers=1)
 
     # debugging_with_plots(model, data_loader)
-    do_prediction_and_optionally_export_csv(model, data_loader)
-    do_quick_plot_from_csv_files(gt_csv_file="/workspace/data/landmark-dewarping/landmark-data/training/gt_poses.csv",
-                                 raw_csv_file="/workspace/data/landmark-dewarping/evaluation/raw_cm-pred_poses.csv",
-                                 pred_csv_file="/workspace/data/landmark-dewarping/evaluation/cm-pred_poses.csv")
+    do_prediction_and_optionally_export_csv(model, data_loader, results_path)
+    do_quick_plot_from_csv_files(gt_csv_file=settings.DATA_DIR + "training/gt_poses.csv",
+                                 raw_csv_file=results_path + "raw_cm_poses.csv",
+                                 pred_csv_file=results_path + "corrections_cm_poses.csv",
+                                 export_path=results_path)
