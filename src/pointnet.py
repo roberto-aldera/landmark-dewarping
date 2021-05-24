@@ -14,7 +14,7 @@ from torch.autograd import Variable
 import pytorch_lightning as pl
 import settings
 from circular_motion_functions import CircularMotionEstimationBase
-from loss_functions import LossFunctionFinalPose
+from loss_functions import LossFunctionOnTheta, LossFunctionCMParameters, LossFunctionFinalPose
 from argparse import ArgumentParser
 import pdb
 
@@ -112,18 +112,11 @@ class PointNetEncoder(nn.Module):
     def forward(self, x):
         B, D, N = x.size()
 
-        # Collect landmarks (x, y) from set 1 and set 2
-        x1 = torch.cat((x[:, 0, :].unsqueeze(1), x[:, 2, :].unsqueeze(1)), dim=1)
-        x2 = torch.cat((x[:, 1, :].unsqueeze(1), x[:, 3, :].unsqueeze(1)), dim=1)
-        trans1 = self.STN2(x1)
-        trans2 = self.STN2(x2)
-        x1 = torch.bmm(x1.transpose(2, 1), trans1).transpose(2, 1)
-        x2 = torch.bmm(x2.transpose(2, 1), trans2).transpose(2, 1)
-        x = torch.cat((x1, x2), dim=1)
-
+        trans = self.STN2(x)
+        x = torch.bmm(x.transpose(2, 1), trans).transpose(2, 1)
         x = F.relu(self.bn1(self.conv1(x)))
         if self.feature_transform:
-            trans_feat = self.fstn(x)
+            trans_feat = self.fstn(x)  # I wonder if this should be split in 2 too
             x = x.transpose(2, 1)
             x = torch.bmm(x, trans_feat)
             x = x.transpose(2, 1)
@@ -157,8 +150,8 @@ class PointNet(pl.LightningModule):
         super(PointNet, self).__init__()
         self.hparams = hparams
         self.k = 2  # correction to x and y, will add a mask as 3rd dim later
-        self.feat = PointNetEncoder(global_feat=False, feature_transform=True, channel=4)
-        self.conv1 = torch.nn.Conv1d(1088, 512, 1)
+        self.feat = PointNetEncoder(global_feat=False, feature_transform=True, channel=2)
+        self.conv1 = torch.nn.Conv1d(1088 * 2, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
         self.conv4 = torch.nn.Conv1d(128, self.k, 1)
@@ -193,7 +186,13 @@ class PointNet(pl.LightningModule):
         b, n, c = x.shape
         x = x.transpose(1, 2).float()
         landmark_positions = x.float()
-        x, _ = self.feat(x)
+        # Split landmarks and pass them through encoder individually
+        x1 = torch.cat((x[:, 0, :].unsqueeze(1), x[:, 2, :].unsqueeze(1)), dim=1)
+        x2 = torch.cat((x[:, 1, :].unsqueeze(1), x[:, 3, :].unsqueeze(1)), dim=1)
+        x1, _ = self.feat(x1)
+        x2, _ = self.feat(x2)
+        x = torch.cat((x1, x2), dim=1)
+
         x = self.net(x)
         x = x.transpose(2, 1).contiguous()
         x = x.view(b, n, self.k)
