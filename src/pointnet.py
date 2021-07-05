@@ -149,8 +149,9 @@ class PointNet(pl.LightningModule):
     def __init__(self, hparams):
         super(PointNet, self).__init__()
         self.hparams = hparams
-        self.k = 2  # correction to x and y, will add a mask as 3rd dim later
-        self.feat = PointNetEncoder(global_feat=False, feature_transform=True, channel=2)
+        self.k = 4  # 2  # correction to x and y, will add a mask as 3rd dim later
+        self.feat = PointNetEncoder(global_feat=False, feature_transform=True,
+                                    channel=2)  # why not try with global_feat? - June 2021
         self.conv1 = torch.nn.Conv1d(1088 * 2, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
@@ -197,9 +198,12 @@ class PointNet(pl.LightningModule):
         x = x.transpose(2, 1).contiguous()
         x = x.view(b, n, self.k)
 
-        prediction_set = torch.zeros(b, n, c).to(self.device)
-        prediction_set[:, :, 1] = x[:, :, 0]
-        prediction_set[:, :, 3] = x[:, :, 1]
+        # prediction_set = torch.zeros(b, n, c).to(self.device)
+        # prediction_set[:, :, 1] = x[:, :, 0]
+        # prediction_set[:, :, 3] = x[:, :, 1]
+        # # Trying to correct both here
+        # prediction_set[:, :, 0] = x[:, :, 2]
+        # prediction_set[:, :, 2] = x[:, :, 3]
 
         if settings.DO_CORRECTION_MAGNITUDE_PLOTS:
             import numpy as np
@@ -216,7 +220,8 @@ class PointNet(pl.LightningModule):
             settings.CORRECTION_PLOTTING_ITR += 1
 
         landmark_positions = landmark_positions.transpose(1, 2)
-        corrected_landmark_positions = landmark_positions.add(prediction_set)
+        # corrected_landmark_positions = landmark_positions.add(prediction_set)
+        corrected_landmark_positions = landmark_positions.add(x)
 
         # Scale landmark positions back up to metres (after being between [-1, 1] for predictions)
         corrected_landmark_positions = torch.mul(corrected_landmark_positions, settings.MAX_LANDMARK_RANGE_METRES)
@@ -225,16 +230,26 @@ class PointNet(pl.LightningModule):
         if settings.DO_PLOTS_IN_FORWARD_PASS:
             import numpy as np
             landmark_positions = landmark_positions * settings.MAX_LANDMARK_RANGE_METRES
-            plt.figure(figsize=(10, 10))
+            alpha_val = 0.5
+            plt.figure(figsize=(5, 5))
             plt.grid()
-            plt.xlim(-settings.MAX_LANDMARK_RANGE_METRES, settings.MAX_LANDMARK_RANGE_METRES)
-            plt.ylim(-settings.MAX_LANDMARK_RANGE_METRES, settings.MAX_LANDMARK_RANGE_METRES)
+            dim_metres = 75  # settings.MAX_LANDMARK_RANGE_METRES
+            plt.xlim(-dim_metres, dim_metres)
+            plt.ylim(-dim_metres, dim_metres)
             plt.plot(np.array(landmark_positions[0, :, 1].detach().numpy()),
-                     np.array(landmark_positions[0, :, 3].detach().numpy()), 'b,', label="original_landmarks")
+                     np.array(landmark_positions[0, :, 3].detach().numpy()), 'b,', alpha=alpha_val,
+                     label="original_landmarks")
             plt.plot(np.array(corrected_landmark_positions[0, :, 1].detach().numpy()),
-                     np.array(corrected_landmark_positions[0, :, 3].detach().numpy()), 'r,',
+                     np.array(corrected_landmark_positions[0, :, 3].detach().numpy()), 'r,', alpha=alpha_val,
+                     label="corrected_landmarks")
+            plt.plot(np.array(landmark_positions[0, :, 0].detach().numpy()),
+                     np.array(landmark_positions[0, :, 2].detach().numpy()), 'g,', alpha=alpha_val,
+                     label="original_landmarks")
+            plt.plot(np.array(corrected_landmark_positions[0, :, 0].detach().numpy()),
+                     np.array(corrected_landmark_positions[0, :, 2].detach().numpy()), 'k,', alpha=alpha_val,
                      label="corrected_landmarks")
             plt.gca().set_aspect('equal', adjustable='box')
+            plt.legend()
             plt.savefig("%s%s%i%s" % (
                 settings.RESULTS_DIR, "landmarks/", settings.PLOTTING_ITR, "_landmarks-and-corrections.pdf"))
             plt.close()
