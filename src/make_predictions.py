@@ -25,7 +25,7 @@ def debugging_with_plots(model, data_loader):
     num_samples = len(data_loader.dataset)
     for i in tqdm(range(num_samples)):
         landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
-        cm_predictions_from_landmarks = model(landmarks).detach().numpy().squeeze(0)
+        cm_predictions_from_landmarks = model(landmarks)[0].detach().squeeze(0)
         best_theta = np.median(cm_predictions_from_landmarks[:, 0])
         best_curvature = 0  # don't need this yet
         cm_predictions.append([best_theta, best_curvature])
@@ -58,11 +58,12 @@ def debugging_with_plots(model, data_loader):
 def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_csv_export=True):
     raw_pose_results = []
     dewarped_pose_results = []
-    num_samples = len(data_loader.dataset)  # settings.TOTAL_SAMPLES
+    num_samples = min(len(data_loader.dataset), settings.TOTAL_SAMPLES)
     quantile_width = 0.5
     quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
 
     for i in tqdm(range(num_samples)):
+        # i += 150  # quick hack to process instances where there is observable ego-motion
         landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
         # Get Circular Motion Estimates from raw landmarks as baseline
         cme_function = CircularMotionEstimationBase()
@@ -187,7 +188,7 @@ def do_quick_plot_from_csv_files(gt_csv_file, raw_csv_file, pred_csv_file, expor
 
 if __name__ == "__main__":
     current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
-    results_path = settings.RESULTS_DIR + "/" + current_time + "/"
+    results_path = settings.RESULTS_DIR + current_time + "/"
     Path(results_path).mkdir(parents=True, exist_ok=True)
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--model_name', type=str, default=settings.ARCHITECTURE_TYPE, help='cmnet or...')
@@ -197,9 +198,10 @@ if __name__ == "__main__":
     params = parser.parse_args()
 
     # Prepare model for evaluation
-    # path_to_model = "/workspace/data/landmark-dewarping/models/pointnetv151.ckpt"
+    # path_to_model = "/Volumes/scratchdata/roberto/landmark-dewarping/models/lightning_logs/version_179/checkpoints/epoch=1-step=97.ckpt"
     path_to_model = "%s%s%s" % (settings.MODEL_DIR, params.model_name, ".ckpt")
     # path_to_model = "/workspace/data/scratchdata/landmark-dewarping/models/pointnet.ckpt"
+    # path_to_model = "/Volumes/scratchdata/roberto/landmark-dewarping/models/pointnet.ckpt"
 
     model = PointNet(params)
     model = model.load_from_checkpoint(path_to_model)
@@ -215,7 +217,7 @@ if __name__ == "__main__":
 
     # debugging_with_plots(model, data_loader)
     do_prediction_and_optionally_export_csv(model, data_loader, results_path)
-    do_quick_plot_from_csv_files(gt_csv_file=settings.DATA_DIR + "training/gt_poses.csv",
-                                 raw_csv_file=results_path + "raw_cm_poses.csv",
-                                 pred_csv_file=results_path + "corrections_cm_poses.csv",
-                                 export_path=results_path)
+    # do_quick_plot_from_csv_files(gt_csv_file=settings.DATA_DIR + "training/gt_poses.csv",
+    #                              raw_csv_file=results_path + "raw_cm_poses.csv",
+    #                              pred_csv_file=results_path + "corrections_cm_poses.csv",
+    #                              export_path=results_path)
