@@ -14,18 +14,18 @@ class LossFunctionFinalPose(nn.Module):
 
     def forward(self, estimate, target):
         b, _, _ = estimate.shape
-
         # Use thetas as a proxy for "best" matches (based on how well they are supported)
         estimated_thetas = estimate[:, :, 0].to(self.device)
         b, n, _ = estimate.shape
         mask = torch.zeros(b, n, 3)
-        quantiles = torch.tensor([0.1, 0.9]).to(self.device)
+        quantiles = torch.tensor([0.25, 0.75]).to(self.device)
         theta_quantiles = torch.quantile(estimated_thetas, quantiles, dim=1).transpose(0, 1)
         mask[(estimated_thetas > theta_quantiles[:, 0].unsqueeze(1)) & (
                 estimated_thetas < theta_quantiles[:, 1].unsqueeze(1))] = 1
 
         # Convert target to x, y, theta
         gt_theta = target[:, 0]
+        target[target[:, 1] == 0] = 1e-9
         gt_radius = 1 / target[:, 1]  # TODO: handle case where curvature could be zero (not yet observed)
 
         phi = gt_theta / 2  # this is because we're enforcing circular motion
@@ -49,11 +49,17 @@ class LossFunctionFinalPose(nn.Module):
         d_y = rho * torch.sin(phi)  # lateral motion
         pose_estimate = torch.stack((d_x, d_y, estimated_thetas), dim=2)
 
-        loss = F.mse_loss(pose_estimate, pose_target, reduction="none")
-        loss = loss * mask
-        loss = loss.mean()
-        # I wonder if this is too simple, as the values that were masked still add to the number of elements to find
-        # the mean over
+        # loss = F.mse_loss(pose_estimate, pose_target, reduction="none")
+        # pdb.set_trace()
+        x_y_th_weights = torch.tensor([1, 1, 10])  # out of thin air for now
+
+        weighted_pose_error = ((pose_estimate - pose_target) ** 2) * x_y_th_weights
+        masked_error = weighted_pose_error #* mask
+        nonzero_masked_error = masked_error[torch.abs(masked_error).sum(dim=2) != 0]
+        # pel = torch.mean(nonzero_masked_error, dim=1)
+        # pel = torch.mean(masked_error[mask != 0], axis=0)  # fix this mean so only nonzero elements are counted
+        # loss = torch.mean(pel)
+        loss = torch.mean(nonzero_masked_error)
         return loss
 
 
