@@ -13,33 +13,35 @@ from liegroups import SE3
 def get_metrics(params):
     # Some code to run KITTI metrics over poses, based on pyslam TrajectoryMetrics
     gt_se3s, gt_timestamps = get_ground_truth_poses_from_csv(
-        "/workspace/data/RadarDataLogs/2019-01-10-14-50-05-radar-oxford-10k/gt/radar_odometry.csv")
+        "/workspace/data/ro-state-files/radar_oxford_10k/2019-01-10-11-46-21/radar_odometry.csv")
     gt_se3s = gt_se3s[settings.K_RADAR_INDEX_OFFSET:]
+
+    num_iterations = min(params.num_samples, len(gt_se3s))
 
     # Pose estimates from full matches
     full_matches_timestamps, full_matches_x_y_th = get_timestamps_and_x_y_th_from_csv(
-        "/workspace/data/landmark-dewarping/metrics/6900_full_matches_poses.csv")
+        "/workspace/data/landmark-distortion/final-results/2019-01-10-11-46-21/full_matches_poses.csv")
 
     # CME metrics vs RANSAC
-    # _, aux0_x_y_th = get_timestamps_and_x_y_th_from_csv(
-    #     "/workspace/data/landmark-distortion/RANSAC-baseline/pose-outputs/2021-06-24-15-10-42/inliers_poses.csv")
-    # _, aux1_x_y_th = get_timestamps_and_x_y_th_from_csv(
-    #     "/workspace/data/landmark-distortion/RANSAC-baseline/pose-outputs/2021-06-25-11-02-55/cm_matches_svd_poses.csv")
+    _, aux0_x_y_th = get_timestamps_and_x_y_th_from_csv(
+        "/workspace/data/landmark-distortion/final-results/2019-01-10-11-46-21/cm_matches_svd_poses.csv")
+    _, aux1_x_y_th = get_timestamps_and_x_y_th_from_csv(
+        "/workspace/data/landmark-distortion/final-results/2019-01-10-11-46-21/cm_matches_poses.csv")
     # _, aux2_x_y_th = get_timestamps_and_x_y_th_from_csv(
     #     "/workspace/data/landmark-distortion/RANSAC-baseline/pose-outputs/2021-06-25-11-02-55/cm_matches_poses.csv")
 
     # Landmark correction inputs to run metrics on:
-    _, aux0_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
-        params.path + "raw_cm_poses.csv")
-    _, aux1_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
-        params.path + "corrections_cm_poses.csv")
+    # _, aux0_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
+    #     params.path + "raw_cm_poses.csv")
+    # _, aux1_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
+    #     params.path + "corrections_cm_poses.csv")
 
     # Cropping if necessary
-    full_matches_timestamps, full_matches_x_y_th = full_matches_timestamps[:settings.TOTAL_SAMPLES], \
-                                                   full_matches_x_y_th[:settings.TOTAL_SAMPLES]
-    aux0_x_y_th = aux0_x_y_th[:settings.TOTAL_SAMPLES]
-    aux1_x_y_th = aux1_x_y_th[:settings.TOTAL_SAMPLES]
-    # aux2_x_y_th = aux2_x_y_th[:settings.TOTAL_SAMPLES]
+    full_matches_timestamps, full_matches_x_y_th = full_matches_timestamps[:num_iterations], \
+                                                   full_matches_x_y_th[:num_iterations]
+    aux0_x_y_th = aux0_x_y_th[:num_iterations]
+    aux1_x_y_th = aux1_x_y_th[:num_iterations]
+    # aux2_x_y_th = aux2_x_y_th[:num_iterations]
 
     # Just a sanity check here
     do_quick_debugging_plot(aux0_x_y_th, aux1_x_y_th)
@@ -98,6 +100,9 @@ def get_metrics(params):
     # tm_gt_aux2 = TrajectoryMetrics(gt_global_SE3s, aux2_global_SE3s)
     # print_trajectory_metrics(tm_gt_aux2, segment_lengths, data_name=settings.AUX2_NAME)
 
+    save_trajectory_metrics_to_file(params, {"Full RO": tm_gt_fullmatches, settings.AUX0_NAME: tm_gt_aux0,
+                                             settings.AUX1_NAME: tm_gt_aux1}, segment_lengths)
+
     # Visualiser experimenting
     from pyslam.visualizers import TrajectoryVisualizer
     output_path_for_metrics = Path(params.path + "visualised_metrics")
@@ -116,6 +121,18 @@ def get_metrics(params):
                                    outfile="%s%s" % (output_path_for_metrics, "/segment_errors.pdf"))
     visualiser.plot_topdown(which_plane='yx',  # this is a custom flip to conform to MRG convention, instead of xy
                             outfile="%s%s" % (output_path_for_metrics, "/topdown.pdf"), figsize=(10, 10))
+
+
+def save_trajectory_metrics_to_file(params, tm_gt_est_dict, segment_lengths):
+    results_file = Path(params.path + "results.txt")
+    with open(results_file, "w") as text_file:
+        for data_name, tm_gt_est in tm_gt_est_dict.items():
+            print(f"{data_name} matches:", file=text_file)
+            print(f"Segment error \n {tm_gt_est.segment_errors(segment_lengths, rot_unit='deg')[1]}",
+                  file=text_file)
+            print(
+                f"Mean segment error \n {np.mean(tm_gt_est.segment_errors(segment_lengths, rot_unit='deg')[1], axis=0)[1:]}",
+                file=text_file)
 
 
 def print_trajectory_metrics(tm_gt_est, segment_lengths, data_name="this"):

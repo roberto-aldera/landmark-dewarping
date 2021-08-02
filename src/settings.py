@@ -28,13 +28,13 @@ BATCH_SIZE = 128
 # Metrics
 K_RADAR_INDEX_OFFSET = 0
 # AUX0_NAME = "RANSAC"
-# AUX1_NAME = "CC-SVD"
-# AUX2_NAME = "CC-means"
-AUX0_NAME = "CC"
-AUX1_NAME = "Corrected-CC"
+AUX0_NAME = "CC-SVD"
+AUX1_NAME = "CC-means"
+# AUX0_NAME = "CC"
+# AUX1_NAME = "Corrected-CC"
 
 # Bools
-IS_RUNNING_ON_SERVER = True
+IS_RUNNING_ON_SERVER = False
 
 if IS_RUNNING_ON_SERVER:
     DO_PLOTS_IN_LOSS = False
