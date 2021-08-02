@@ -89,13 +89,13 @@ def get_metrics(params):
     # segment_lengths = [100, 200, 300]
 
     tm_gt_fullmatches = TrajectoryMetrics(gt_global_SE3s, full_matches_global_SE3s)
-    print_trajectory_metrics(tm_gt_fullmatches, segment_lengths, data_name="full match")
+    # print_trajectory_metrics(tm_gt_fullmatches, segment_lengths, data_name="full match")
 
     tm_gt_aux0 = TrajectoryMetrics(gt_global_SE3s, aux0_global_SE3s)
-    print_trajectory_metrics(tm_gt_aux0, segment_lengths, data_name=settings.AUX0_NAME)
+    # print_trajectory_metrics(tm_gt_aux0, segment_lengths, data_name=settings.AUX0_NAME)
 
     tm_gt_aux1 = TrajectoryMetrics(gt_global_SE3s, aux1_global_SE3s)
-    print_trajectory_metrics(tm_gt_aux1, segment_lengths, data_name=settings.AUX1_NAME)
+    # print_trajectory_metrics(tm_gt_aux1, segment_lengths, data_name=settings.AUX1_NAME)
 
     # tm_gt_aux2 = TrajectoryMetrics(gt_global_SE3s, aux2_global_SE3s)
     # print_trajectory_metrics(tm_gt_aux2, segment_lengths, data_name=settings.AUX2_NAME)
@@ -124,14 +124,16 @@ def get_metrics(params):
 
 
 def save_trajectory_metrics_to_file(params, tm_gt_est_dict, segment_lengths):
+    print("Calculating trajectory metrics to save to file...")
     results_file = Path(params.path + "results.txt")
     with open(results_file, "w") as text_file:
         for data_name, tm_gt_est in tm_gt_est_dict.items():
             print(f"{data_name} matches:", file=text_file)
-            print(f"Segment error \n {tm_gt_est.segment_errors(segment_lengths, rot_unit='deg')[1]}",
-                  file=text_file)
             print(
-                f"Mean segment error \n {np.mean(tm_gt_est.segment_errors(segment_lengths, rot_unit='deg')[1], axis=0)[1:]}",
+                f"Segment error - lengths (m), translation (m), rotation (deg) \n {tm_gt_est.segment_errors(segment_lengths, rot_unit='deg')[1]}",
+                file=text_file)
+            print(
+                f"Mean segment error: translation (m), rotation (deg) \n {np.mean(tm_gt_est.segment_errors(segment_lengths, rot_unit='deg')[1], axis=0)[1:]} \n",
                 file=text_file)
 
 
