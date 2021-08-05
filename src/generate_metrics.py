@@ -11,24 +11,25 @@ from liegroups import SE3
 
 
 def get_metrics(params):
+    folder_date_name = "2019-01-10-15-19-41"
     # Some code to run KITTI metrics over poses, based on pyslam TrajectoryMetrics
     gt_se3s, gt_timestamps = get_ground_truth_poses_from_csv(
-        "/workspace/data/ro-state-files/radar_oxford_10k/2019-01-10-11-46-21/radar_odometry.csv")
+        "/workspace/data/ro-state-files/radar_oxford_10k/" + folder_date_name + "/radar_odometry.csv")
     gt_se3s = gt_se3s[settings.K_RADAR_INDEX_OFFSET:]
 
     num_iterations = min(params.num_samples, len(gt_se3s))
 
     # Pose estimates from full matches
     full_matches_timestamps, full_matches_x_y_th = get_timestamps_and_x_y_th_from_csv(
-        "/workspace/data/landmark-distortion/final-results/2019-01-10-11-46-21/full_matches_poses.csv")
+        "/workspace/data/landmark-distortion/final-results/" + folder_date_name + "/full_matches_poses.csv")
 
     # CME metrics vs RANSAC
     _, aux0_x_y_th = get_timestamps_and_x_y_th_from_csv(
-        "/workspace/data/landmark-distortion/final-results/2019-01-10-11-46-21/cm_matches_svd_poses.csv")
+        "/workspace/data/landmark-distortion/final-results/" + folder_date_name + "/ransac_poses.csv")
     _, aux1_x_y_th = get_timestamps_and_x_y_th_from_csv(
-        "/workspace/data/landmark-distortion/final-results/2019-01-10-11-46-21/cm_matches_poses.csv")
-    # _, aux2_x_y_th = get_timestamps_and_x_y_th_from_csv(
-    #     "/workspace/data/landmark-distortion/RANSAC-baseline/pose-outputs/2021-06-25-11-02-55/cm_matches_poses.csv")
+        "/workspace/data/landmark-distortion/final-results/" + folder_date_name + "/35-65-percentiles/cm_matches_svd_poses.csv")
+    _, aux2_x_y_th = get_timestamps_and_x_y_th_from_csv(
+        "/workspace/data/landmark-distortion/final-results/" + folder_date_name + "/35-65-percentiles/cm_matches_poses.csv")
 
     # Landmark correction inputs to run metrics on:
     # _, aux0_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
@@ -41,7 +42,7 @@ def get_metrics(params):
                                                    full_matches_x_y_th[:num_iterations]
     aux0_x_y_th = aux0_x_y_th[:num_iterations]
     aux1_x_y_th = aux1_x_y_th[:num_iterations]
-    # aux2_x_y_th = aux2_x_y_th[:num_iterations]
+    aux2_x_y_th = aux2_x_y_th[:num_iterations]
 
     # Just a sanity check here
     do_quick_debugging_plot(aux0_x_y_th, aux1_x_y_th)
@@ -49,7 +50,7 @@ def get_metrics(params):
     full_matches_se3s = get_raw_se3s_from_x_y_th(full_matches_x_y_th)
     aux0_se3s = get_raw_se3s_from_x_y_th(aux0_x_y_th)
     aux1_se3s = get_raw_se3s_from_x_y_th(aux1_x_y_th)
-    # aux2_se3s = get_raw_se3s_from_x_y_th(aux2_x_y_th)
+    aux2_se3s = get_raw_se3s_from_x_y_th(aux2_x_y_th)
 
     relative_pose_index = settings.K_RADAR_INDEX_OFFSET + 1
     relative_pose_timestamp = gt_timestamps[relative_pose_index]
@@ -80,10 +81,10 @@ def get_metrics(params):
         aux1_global_se3s.append(aux1_global_se3s[i - 1] @ aux1_se3s[i])
     aux1_global_SE3s = get_se3s_from_raw_se3s(aux1_global_se3s)
 
-    # aux2_global_se3s = [np.identity(4)]
-    # for i in range(1, len(aux2_se3s)):
-    #     aux2_global_se3s.append(aux2_global_se3s[i - 1] @ aux2_se3s[i])
-    # aux2_global_SE3s = get_se3s_from_raw_se3s(aux2_global_se3s)
+    aux2_global_se3s = [np.identity(4)]
+    for i in range(1, len(aux2_se3s)):
+        aux2_global_se3s.append(aux2_global_se3s[i - 1] @ aux2_se3s[i])
+    aux2_global_SE3s = get_se3s_from_raw_se3s(aux2_global_se3s)
 
     segment_lengths = [100, 200, 300, 400, 500, 600, 700, 800]
     # segment_lengths = [100, 200, 300]
@@ -97,11 +98,12 @@ def get_metrics(params):
     tm_gt_aux1 = TrajectoryMetrics(gt_global_SE3s, aux1_global_SE3s)
     # print_trajectory_metrics(tm_gt_aux1, segment_lengths, data_name=settings.AUX1_NAME)
 
-    # tm_gt_aux2 = TrajectoryMetrics(gt_global_SE3s, aux2_global_SE3s)
+    tm_gt_aux2 = TrajectoryMetrics(gt_global_SE3s, aux2_global_SE3s)
     # print_trajectory_metrics(tm_gt_aux2, segment_lengths, data_name=settings.AUX2_NAME)
 
     save_trajectory_metrics_to_file(params, {"Full RO": tm_gt_fullmatches, settings.AUX0_NAME: tm_gt_aux0,
-                                             settings.AUX1_NAME: tm_gt_aux1}, segment_lengths)
+                                             settings.AUX1_NAME: tm_gt_aux1, settings.AUX2_NAME: tm_gt_aux2},
+                                    segment_lengths)
 
     # Visualiser experimenting
     from pyslam.visualizers import TrajectoryVisualizer
@@ -110,11 +112,11 @@ def get_metrics(params):
         shutil.rmtree(output_path_for_metrics)
     output_path_for_metrics.mkdir(parents=True)
 
-    # visualiser = TrajectoryVisualizer(
-    #     {"Full matches": tm_gt_fullmatches, settings.AUX0_NAME: tm_gt_aux0, settings.AUX1_NAME: tm_gt_aux1,
-    #      settings.AUX2_NAME: tm_gt_aux2})
     visualiser = TrajectoryVisualizer(
-        {"Full matches": tm_gt_fullmatches, settings.AUX0_NAME: tm_gt_aux0, settings.AUX1_NAME: tm_gt_aux1})
+        {"Full matches": tm_gt_fullmatches, settings.AUX0_NAME: tm_gt_aux0, settings.AUX1_NAME: tm_gt_aux1,
+         settings.AUX2_NAME: tm_gt_aux2})
+    # visualiser = TrajectoryVisualizer(
+    #     {"Full matches": tm_gt_fullmatches, settings.AUX0_NAME: tm_gt_aux0, settings.AUX1_NAME: tm_gt_aux1})
     visualiser.plot_cum_norm_err(figsize=(10, 3),
                                  outfile="%s%s" % (output_path_for_metrics, "/cumulative_norm_errors.pdf"))
     visualiser.plot_segment_errors(figsize=(10, 4), segs=segment_lengths, legend_fontsize=8,

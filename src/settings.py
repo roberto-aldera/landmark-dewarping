@@ -10,7 +10,7 @@ K_MAX_MATCHES = 600
 MAX_LANDMARK_RANGE_METRES = 165  # 165  # 3768 bins at a resolution of 0.0438 cm per bin
 
 # General dataset parameters
-TOTAL_SAMPLES = 6900  # 1200
+TOTAL_SAMPLES = 10000  # 1200
 TRAIN_RATIO = 0.9
 TRAIN_SET_SIZE = int(TOTAL_SAMPLES * TRAIN_RATIO)
 VAL_SET_SIZE = TOTAL_SAMPLES - TRAIN_SET_SIZE
@@ -27,9 +27,9 @@ BATCH_SIZE = 128
 
 # Metrics
 K_RADAR_INDEX_OFFSET = 0
-# AUX0_NAME = "RANSAC"
-AUX0_NAME = "CC-SVD"
-AUX1_NAME = "CC-means"
+AUX0_NAME = "RANSAC"
+AUX1_NAME = "CC-SVD"
+AUX2_NAME = "CC-means"
 # AUX0_NAME = "CC"
 # AUX1_NAME = "Corrected-CC"
 
@@ -57,6 +57,10 @@ else:
     DATA_DIR = ROOT_DIR + "landmark-data/"
     MODEL_DIR = ROOT_DIR + "models/"
     RESULTS_DIR = ROOT_DIR + "evaluation/"
+
+# Landmark CSV exporting
+RO_STATE_PATH = "/workspace/data/ro-state-files/radar_oxford_10k/2019-01-10-15-19-41/"
+LANDMARK_CSV_EXPORT_PATH = "/workspace/data/landmark-dewarping/landmark-data/2019-01-10-11-46-21"
 
 PLOTTING_ITR = 0
 CORRECTION_PLOTTING_ITR = 0
