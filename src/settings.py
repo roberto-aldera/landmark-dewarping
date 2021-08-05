@@ -59,8 +59,9 @@ else:
     RESULTS_DIR = ROOT_DIR + "evaluation/"
 
 # Landmark CSV exporting
-RO_STATE_PATH = "/workspace/data/ro-state-files/radar_oxford_10k/2019-01-10-15-19-41/"
-LANDMARK_CSV_EXPORT_PATH = "/workspace/data/landmark-dewarping/landmark-data/2019-01-10-11-46-21"
+folder_date_name = "2019-01-10-12-32-52"
+RO_STATE_PATH = "/workspace/data/ro-state-files/radar_oxford_10k/" + folder_date_name + "/"
+LANDMARK_CSV_EXPORT_PATH = "/workspace/data/landmark-dewarping/landmark-data/" + folder_date_name + "/"
 
 PLOTTING_ITR = 0
 CORRECTION_PLOTTING_ITR = 0

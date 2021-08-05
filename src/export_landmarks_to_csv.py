@@ -35,7 +35,10 @@ def get_landmarks_as_matches(params, radar_state_mono, save_to_csv=True):
         shutil.rmtree(output_path)
     output_path.mkdir(parents=True)
 
-    for i in tqdm(range(params.num_samples)):
+    num_iterations = min(params.num_samples, len(radar_state_mono))
+    print("Running for", num_iterations, "samples")
+
+    for i in tqdm(range(num_iterations)):
         pb_state, name_scan, _ = radar_state_mono[i]
         ro_state = get_ro_state_from_pb(pb_state)
         timestamps_from_ro_state.append(ro_state.timestamp)
@@ -78,7 +81,7 @@ if __name__ == "__main__":
                         help='Path to folder containing required inputs')
     parser.add_argument('--output_path', type=str, default=settings.LANDMARK_CSV_EXPORT_PATH,
                         help='Path to folder where outputs will be saved')
-    parser.add_argument('--num_samples', type=int, default=100,
+    parser.add_argument('--num_samples', type=int, default=settings.TOTAL_SAMPLES,
                         help='Number of samples to process')
     parser.add_argument('--verbose', type=int, default=0,
                         help='Logging level')
