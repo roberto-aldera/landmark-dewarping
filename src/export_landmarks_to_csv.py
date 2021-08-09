@@ -28,7 +28,7 @@ logger = logging.getLogger('__name__')
 
 def get_landmarks_as_matches(params, radar_state_mono, save_to_csv=True):
     timestamps_from_ro_state = []
-    
+
     export_path = params.output_path + "/exported_matched_landmarks/"
     output_path = Path(export_path)
     if output_path.exists() and output_path.is_dir():
@@ -66,6 +66,17 @@ def get_landmarks_as_matches(params, radar_state_mono, save_to_csv=True):
 
         if save_to_csv:
             save_matched_landmarks_to_csv(matched_points, i, output_path)
+
+    # Save timestamps at the end, provides a way of checking saved landmarks against gt_poses
+    if save_to_csv:
+        save_ro_timestamps_to_txt(timestamps_from_ro_state, params.output_path)
+
+
+def save_ro_timestamps_to_txt(timestamps, export_folder):
+    with open("%s%s" % (export_folder, "/ro_timestamps.txt"), 'w') as timestamps_file:
+        for i in range(len(timestamps)):
+            # pdb.set_trace()
+            timestamps_file.write(str(timestamps[i]) + "\n")
 
 
 def save_matched_landmarks_to_csv(matched_landmarks, idx, export_folder):

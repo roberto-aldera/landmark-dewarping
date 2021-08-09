@@ -43,7 +43,7 @@ if IS_RUNNING_ON_SERVER:
     DO_GRADIENT_PLOTS = False
 else:
     DO_PLOTS_IN_LOSS = False
-    DO_PLOTS_IN_FORWARD_PASS = True
+    DO_PLOTS_IN_FORWARD_PASS = False
     DO_CORRECTION_MAGNITUDE_PLOTS = False
     DO_GRADIENT_PLOTS = False
 
@@ -61,7 +61,7 @@ else:
 # Landmark CSV exporting
 folder_date_name = "2019-01-10-12-32-52"
 RO_STATE_PATH = "/workspace/data/ro-state-files/radar_oxford_10k/" + folder_date_name + "/"
-LANDMARK_CSV_EXPORT_PATH = "/workspace/data/landmark-dewarping/landmark-data/" + folder_date_name + "/"
+LANDMARK_CSV_EXPORT_PATH = "/workspace/data/landmark-dewarping/landmark-data/datasets/" + folder_date_name + "/"
 
 PLOTTING_ITR = 0
 CORRECTION_PLOTTING_ITR = 0

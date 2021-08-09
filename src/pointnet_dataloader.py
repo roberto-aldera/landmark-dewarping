@@ -1,52 +1,40 @@
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import random_split, DataLoader, Dataset
 import pytorch_lightning as pl
 from torchvision import transforms
 import settings
 import pdb
 
 
-class LandmarkDataset:
-    """Landmark dataset."""
-
-    def __init__(self, root_dir, is_training_data=True, transform=None):
-        """
-        Args:
-            root_dir (string): Directory with all the images.
-            train (bool): Specify if the required data is for training/validation, or testing
-            transform (callable, optional): Optional transform to be applied
-                on a sample.
-        """
-        if is_training_data:
-            self.root_dir = root_dir + "training" + "/"
-        else:
-            self.root_dir = root_dir + "test" + "/"
-        self.is_training_data = is_training_data
+class CustomDataset(Dataset):
+    def __init__(self, data_root, transform=None):
+        self.data_root = data_root
+        self.landmark_file_names = []
+        self.cm_parameters = []
+        self.training_set_size = 0
+        self.validation_set_size = 0
         self.transform = transform
 
+        dataset_index_file = self.data_root + "/dataset_index.txt"
+
+        with open(dataset_index_file) as f:
+            self.landmark_file_names = [line.rstrip() for line in f]  # f.readlines()
+
+        self.cm_parameters = pd.read_csv(self.data_root + "/all_gt_poses.csv", header=None)
+
+        self.training_set_size = int(len(self.landmark_file_names) * settings.TRAIN_RATIO)
+        self.validation_set_size = len(self.landmark_file_names) - self.training_set_size
+
     def __len__(self):
-        if self.is_training_data:
-            subset_size = settings.TOTAL_SAMPLES
-        else:
-            subset_size = 0
-            raise NotImplementedError
-        return subset_size
+        return len(self.landmark_file_names)
 
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-        if self.is_training_data:
-            landmark_file = self.root_dir + "matched_landmarks/training_" + str(idx) + ".csv"
-        else:
-            landmark_file = self.root_dir + "matched_landmarks/test_" + str(idx) + ".csv"
-
-        landmarks = pd.read_csv(landmark_file, header=None)
-        all_cm_parameters = pd.read_csv(self.root_dir + "gt_poses.csv", header=None)
-        # Get the cm parameters for this particular match set (just theta and curvature)
-        cm_parameters = all_cm_parameters.iloc[idx, 1:3]
-        sample = {'landmarks': landmarks, 'cm_parameters': cm_parameters}
+    def __getitem__(self, index):
+        if torch.is_tensor(index):
+            index = index.tolist()
+        landmarks = pd.read_csv(self.landmark_file_names[index], header=None)
+        sample = {'landmarks': landmarks, 'cm_parameters': self.cm_parameters.iloc[index, 1:3]}
 
         if self.transform:
             sample = self.transform(sample)  # look at shuffling here later
@@ -104,14 +92,18 @@ class LandmarksDataModule(pl.LightningDataModule):
         self.root_dir = settings.DATA_DIR
         self.batch_size = settings.BATCH_SIZE
         self.transform = transforms.Compose([ToTensor(), Normalise(), FixSampleSize()])
+        self.train_data = None
+        self.valid_data = None
+        self.test_data = None
 
     # def prepare_data(self):
     #     raise NotImplementedError
 
     def setup(self, stage=None):
-        data_full = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
-                                    transform=self.transform)
-        self.train_data, self.valid_data = random_split(data_full, [settings.TRAIN_SET_SIZE, settings.VAL_SET_SIZE])
+        data_full = CustomDataset(data_root=settings.DATA_DIR, transform=self.transform)
+
+        self.train_data, self.valid_data = random_split(data_full,
+                                                        [data_full.training_set_size, data_full.validation_set_size])
         self.test_data = None
 
     def train_dataloader(self):
@@ -128,14 +120,13 @@ class LandmarksDataModule(pl.LightningDataModule):
 def main():
     # Define a main loop to run and show some example data if this script is run as main
     transform = transforms.Compose([ToTensor(), Normalise(), FixSampleSize()])
-    data_full = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
-                                transform=transform)
-    train_data, valid_data = random_split(data_full, [settings.TRAIN_SET_SIZE, settings.VAL_SET_SIZE],
+    data_full = CustomDataset(data_root=settings.DATA_DIR, transform=transform)
+    train_data, valid_data = random_split(data_full, [data_full.training_set_size, data_full.validation_set_size],
                                           generator=torch.Generator().manual_seed(
                                               0))  # seed is already set in settings with pl.seed_everything(0)
 
     print("Training dataset size:", len(train_data))
-    print("Training dataset size:", len(valid_data))
+    print("Validation dataset size:", len(valid_data))
 
     sample_data = train_data[0]
     landmarks = np.array(sample_data['landmarks'])
