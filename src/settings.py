@@ -27,14 +27,14 @@ BATCH_SIZE = 128
 
 # Metrics
 K_RADAR_INDEX_OFFSET = 0
-AUX0_NAME = "RANSAC"
-AUX1_NAME = "CC-SVD"
-AUX2_NAME = "CC-means"
-# AUX0_NAME = "CC"
-# AUX1_NAME = "Corrected-CC"
+# AUX0_NAME = "RANSAC"
+# AUX1_NAME = "CC-SVD"
+# AUX2_NAME = "CC-means"
+AUX0_NAME = "CC"
+AUX1_NAME = "Corrected-CC"
 
 # Bools
-IS_RUNNING_ON_SERVER = False
+IS_RUNNING_ON_SERVER = True
 
 if IS_RUNNING_ON_SERVER:
     DO_PLOTS_IN_LOSS = False
@@ -49,17 +49,19 @@ else:
 
 if IS_RUNNING_ON_SERVER is True:
     ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"
-    DATA_DIR = "/workspace/landmark-data/"
+    DATA_DIR = "/workspace/data/landmark-dewarping/landmark-data/"
+    EVALUATION_DATA_DIR = "/workspace/data/landmark-dewarping/landmark-data/datasets/2019-01-10-11-46-21/"
     MODEL_DIR = ROOT_DIR + "models/"
     RESULTS_DIR = ROOT_DIR + "evaluation/"
 else:
     ROOT_DIR = "/workspace/data/landmark-dewarping/"
     DATA_DIR = ROOT_DIR + "landmark-data/"
+    EVALUATION_DATA_DIR = "/workspace/data/landmark-dewarping/landmark-data/datasets/2019-01-10-11-46-21/"
     MODEL_DIR = ROOT_DIR + "models/"
     RESULTS_DIR = ROOT_DIR + "evaluation/"
 
 # Landmark CSV exporting
-folder_date_name = "2019-01-10-12-32-52"
+folder_date_name = "2019-01-10-15-19-41"
 RO_STATE_PATH = "/workspace/data/ro-state-files/radar_oxford_10k/" + folder_date_name + "/"
 LANDMARK_CSV_EXPORT_PATH = "/workspace/data/landmark-dewarping/landmark-data/datasets/" + folder_date_name + "/"
 

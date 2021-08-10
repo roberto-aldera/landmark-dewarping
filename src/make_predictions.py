@@ -1,12 +1,10 @@
 from argparse import ArgumentParser
 from pathlib import Path
 import matplotlib.pyplot as plt
-# from cmnet import CMNet
 from pointnet import PointNet
 from torchvision import transforms
 from torch.utils.data import random_split, DataLoader
-# from custom_dataloader import LandmarksDataModule, LandmarkDataset, ToTensor, Normalise, SubsetSampling, ZeroPadding
-from pointnet_dataloader import LandmarksDataModule, LandmarkDataset, ToTensor, Normalise, FixSampleSize
+from pointnet_dataloader import SingleDataset, ToTensor, Normalise, FixSampleSize
 from circular_motion_functions import get_transform_by_r_and_theta, save_timestamps_and_cme_to_csv, MotionEstimate, \
     CircularMotionEstimationBase
 from get_rigid_body_motion import get_motion_estimate_from_svd
@@ -59,8 +57,9 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
     raw_pose_results = []
     dewarped_pose_results = []
     num_samples = min(len(data_loader.dataset), settings.TOTAL_SAMPLES)
-    quantile_width = 0.5
+    quantile_width = 0.3
     quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
+    print("Running for", num_samples, "samples...")
 
     for i in tqdm(range(num_samples)):
         # i += 150  # quick hack to process instances where there is observable ego-motion
@@ -190,6 +189,7 @@ if __name__ == "__main__":
     current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
     results_path = settings.RESULTS_DIR + current_time + "/"
     Path(results_path).mkdir(parents=True, exist_ok=True)
+    print("Results will be saved to:", results_path)
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--model_name', type=str, default=settings.ARCHITECTURE_TYPE, help='cmnet or...')
 
@@ -198,10 +198,10 @@ if __name__ == "__main__":
     params = parser.parse_args()
 
     # Prepare model for evaluation
-    path_to_model = "/Volumes/scratchdata/roberto/landmark-dewarping/models/lightning_logs/version_180/checkpoints/epoch=28-step=1420.ckpt"
-    # path_to_model = "%s%s%s" % (settings.MODEL_DIR, params.model_name, ".ckpt")
+    # path_to_model = "/workspace/data/landmark-dewarping/models/best_val_models/epoch=35-step=4391.ckpt"
+    path_to_model = "%s%s%s" % (settings.MODEL_DIR, params.model_name, ".ckpt")
     # path_to_model = "/workspace/data/scratchdata/landmark-dewarping/models/pointnet.ckpt"
-    # path_to_model = "/Volumes/scratchdata/roberto/landmark-dewarping/models/pointnet.ckpt"
+    # path_to_model = "/Volumes/scratchdata/roberto/landmark-dewarping/models/lightning_logs/version_183/checkpoints/epoch=35-step=4391.ckpt"
 
     model = PointNet(params)
     model = model.load_from_checkpoint(path_to_model)
@@ -210,8 +210,8 @@ if __name__ == "__main__":
 
     # Load data to evaluate over (just training data for now)
     transform = transforms.Compose([ToTensor(), Normalise(), FixSampleSize()])
-    dataset = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
-                              transform=transform)
+    dataset = SingleDataset(root_dir=settings.EVALUATION_DATA_DIR, transform=transform)
+
     data_loader = DataLoader(dataset, batch_size=1,  # not sure if batch size here needs to be only 1
                              shuffle=False, num_workers=1)
 

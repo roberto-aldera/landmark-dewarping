@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import random_split, DataLoader, Dataset
 import pytorch_lightning as pl
 from torchvision import transforms
+import os
 import settings
 import pdb
 
@@ -17,12 +18,12 @@ class CustomDataset(Dataset):
         self.validation_set_size = 0
         self.transform = transform
 
-        dataset_index_file = self.data_root + "/dataset_index.txt"
+        dataset_index_file = self.data_root + "dataset_index.txt"
 
         with open(dataset_index_file) as f:
             self.landmark_file_names = [line.rstrip() for line in f]  # f.readlines()
 
-        self.cm_parameters = pd.read_csv(self.data_root + "/all_gt_poses.csv", header=None)
+        self.cm_parameters = pd.read_csv(self.data_root + "all_gt_poses.csv", header=None)
 
         self.training_set_size = int(len(self.landmark_file_names) * settings.TRAIN_RATIO)
         self.validation_set_size = len(self.landmark_file_names) - self.training_set_size
@@ -35,6 +36,35 @@ class CustomDataset(Dataset):
             index = index.tolist()
         landmarks = pd.read_csv(self.landmark_file_names[index], header=None)
         sample = {'landmarks': landmarks, 'cm_parameters': self.cm_parameters.iloc[index, 1:3]}
+
+        if self.transform:
+            sample = self.transform(sample)  # look at shuffling here later
+
+        return sample
+
+
+class SingleDataset:
+
+    def __init__(self, root_dir, transform=None):
+        self.data_root = root_dir
+        self.transform = transform
+
+    def __len__(self):
+        landmark_folder = self.data_root + "exported_matched_landmarks/"
+        num_instances = len(os.listdir(landmark_folder))
+
+        return num_instances
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+        landmark_file = self.data_root + "exported_matched_landmarks/training_" + str(idx) + ".csv"
+
+        landmarks = pd.read_csv(landmark_file, header=None)
+        all_cm_parameters = pd.read_csv(self.data_root + "gt_poses.csv", header=None)
+        # Get the cm parameters for this particular match set (just theta and curvature)
+        cm_parameters = all_cm_parameters.iloc[idx, 1:3]
+        sample = {'landmarks': landmarks, 'cm_parameters': cm_parameters}
 
         if self.transform:
             sample = self.transform(sample)  # look at shuffling here later
