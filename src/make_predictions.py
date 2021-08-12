@@ -199,9 +199,9 @@ if __name__ == "__main__":
 
     # Prepare model for evaluation
     # path_to_model = "/workspace/data/landmark-dewarping/models/best_val_models/epoch=35-step=4391.ckpt"
-    path_to_model = "%s%s%s" % (settings.MODEL_DIR, params.model_name, ".ckpt")
+    # path_to_model = "%s%s%s" % (settings.MODEL_DIR, params.model_name, ".ckpt")
     # path_to_model = "/workspace/data/scratchdata/landmark-dewarping/models/pointnet.ckpt"
-    # path_to_model = "/Volumes/scratchdata/roberto/landmark-dewarping/models/lightning_logs/version_183/checkpoints/epoch=35-step=4391.ckpt"
+    path_to_model = "/Volumes/scratchdata/roberto/landmark-dewarping/models/lightning_logs/version_185/checkpoints/epoch=176-step=40001.ckpt"
 
     model = PointNet(params)
     model = model.load_from_checkpoint(path_to_model)
