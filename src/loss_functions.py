@@ -17,11 +17,11 @@ class LossFunctionFinalPose(nn.Module):
         # Use thetas as a proxy for "best" matches (based on how well they are supported)
         estimated_thetas = estimate[:, :, 0].to(self.device)
         b, n, _ = estimate.shape
-        mask = torch.zeros(b, n, 3)
-        quantiles = torch.tensor([0.25, 0.75]).to(self.device)
-        theta_quantiles = torch.quantile(estimated_thetas, quantiles, dim=1).transpose(0, 1)
-        mask[(estimated_thetas > theta_quantiles[:, 0].unsqueeze(1)) & (
-                estimated_thetas < theta_quantiles[:, 1].unsqueeze(1))] = 1
+        # mask = torch.zeros(b, n, 3)
+        # quantiles = torch.tensor([0, 1]).to(self.device)
+        # theta_quantiles = torch.quantile(estimated_thetas, quantiles, dim=1).transpose(0, 1)
+        # mask[(estimated_thetas > theta_quantiles[:, 0].unsqueeze(1)) & (
+        #         estimated_thetas < theta_quantiles[:, 1].unsqueeze(1))] = 1
 
         # Convert target to x, y, theta
         gt_theta = target[:, 0]
