@@ -1,56 +1,17 @@
 from argparse import ArgumentParser
 from pathlib import Path
-import matplotlib.pyplot as plt
 from pointnet import PointNet
 from torchvision import transforms
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import DataLoader
 from pointnet_dataloader import SingleDataset, ToTensor, Normalise, FixSampleSize
 from circular_motion_functions import get_transform_by_r_and_theta, save_timestamps_and_cme_to_csv, MotionEstimate, \
     CircularMotionEstimationBase
-from get_rigid_body_motion import get_motion_estimate_from_svd
 from tqdm import tqdm
 import numpy as np
 import torch
 import settings
 import pdb
-import csv
 import time
-
-
-def debugging_with_plots(model, data_loader):
-    gt_cm = []
-    cm_predictions = []
-    num_samples = len(data_loader.dataset)
-    for i in tqdm(range(num_samples)):
-        landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
-        cm_predictions_from_landmarks = model(landmarks)[0].detach().squeeze(0)
-        best_theta = np.median(cm_predictions_from_landmarks[:, 0])
-        best_curvature = 0  # don't need this yet
-        cm_predictions.append([best_theta, best_curvature])
-        gt_cm.append(data_loader.dataset[i]['cm_parameters'])
-
-    # Plot the landmarks from the match (the second set will have had the corrections applied at this point)
-    plt.figure(figsize=(10, 10))
-    plt.grid()
-    plt.plot(np.array(landmarks[0, :, 0]), np.array(landmarks[0, :, 2]), ',')
-    plt.plot(np.array(landmarks[0, :, 1]), np.array(landmarks[0, :, 3]), ',')
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.savefig("%s%s" % (settings.RESULTS_DIR, "landmarks.pdf"))
-    plt.close()
-    print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "landmarks.pdf"))
-
-    # Plot thetas and the predicted thetas
-    gt_thetas = [item[0] for item in gt_cm]
-    pred_thetas = [item[0] for item in cm_predictions]
-
-    plt.figure(figsize=(15, 5))
-    plt.grid()
-    plt.plot(gt_thetas, '+', label="gt_theta")
-    plt.plot(pred_thetas, '.', label="est_theta")
-    plt.legend()
-    plt.savefig("%s%s" % (settings.RESULTS_DIR, "thetas.pdf"))
-    plt.close()
-    print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "thetas.pdf"))
 
 
 def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_csv_export=True):
@@ -62,7 +23,6 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
     print("Running for", num_samples, "samples...")
 
     for i in tqdm(range(num_samples)):
-        # i += 150  # quick hack to process instances where there is observable ego-motion
         landmarks = data_loader.dataset[i]['landmarks'].unsqueeze(0)
         # Get Circular Motion Estimates from raw landmarks as baseline
         cme_function = CircularMotionEstimationBase()
@@ -141,51 +101,6 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
                                        pose_source="corrections_cm", export_folder=export_path)
 
 
-def get_data_from_csv(csv_file):
-    with open(csv_file, newline='') as f:
-        reader = csv.reader(f)
-        motion_estimate_data = list(reader)
-
-    # timestamps = [int(item[0]) for item in motion_estimate_data]
-    dx = [float(items[3]) for items in motion_estimate_data]
-    dy = [float(items[4]) for items in motion_estimate_data]
-    dth = [float(items[5]) for items in motion_estimate_data]
-    return [dx, dy, dth]
-
-
-def do_quick_plot_from_csv_files(gt_csv_file, raw_csv_file, pred_csv_file, export_path):
-    # Read in CSVs for comparison
-    gt_x_y_th = get_data_from_csv(gt_csv_file)
-    raw_x_y_th = get_data_from_csv(raw_csv_file)
-    pred_x_y_th = get_data_from_csv(pred_csv_file)
-
-    plt.figure(figsize=(15, 5))
-    dim = settings.TOTAL_SAMPLES + 50
-    plt.xlim(0, dim)
-    plt.grid()
-    m_size = 5
-    line_width = 0.5
-    plt.plot(np.array(gt_x_y_th[0]), 'b+-', linewidth=line_width, markersize=m_size, mew=0.3, label="dx_gt")
-    plt.plot(np.array(gt_x_y_th[1]), 'bx-', linewidth=line_width, markersize=m_size, mew=0.3, label="dy_gt")
-    plt.plot(np.array(gt_x_y_th[2]), 'bo-', linewidth=line_width, markersize=m_size, mew=0.3, fillstyle="none",
-             label="dth_gt")
-    plt.plot(np.array(raw_x_y_th[0]), 'r+-', linewidth=line_width, markersize=m_size, mew=0.3, label="dx_raw")
-    plt.plot(np.array(raw_x_y_th[1]), 'rx-', linewidth=line_width, markersize=m_size, mew=0.3, label="dy_raw")
-    plt.plot(np.array(raw_x_y_th[2]), 'ro-', linewidth=line_width, markersize=m_size, mew=0.3, fillstyle="none",
-             label="dth_raw")
-    plt.plot(np.array(pred_x_y_th[0]), 'g+-', linewidth=line_width, markersize=m_size, mew=0.3, label="dx_pred")
-    plt.plot(np.array(pred_x_y_th[1]), 'gx-', linewidth=line_width, markersize=m_size, mew=0.3, label="dy_pred")
-    plt.plot(np.array(pred_x_y_th[2]), 'go-', linewidth=line_width, markersize=m_size, mew=0.3, fillstyle="none",
-             label="dth_pred")
-    plt.title("Pose estimates")
-    plt.xlabel("Sample index")
-    plt.ylabel("units/sample")
-    plt.legend()
-    plt.savefig("%s%s" % (export_path, "pose_predictions_comparison.pdf"))
-    plt.close()
-    print("Saved figure to:", "%s%s" % (export_path, "pose_predictions_comparison.pdf"))
-
-
 if __name__ == "__main__":
     current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
     results_path = settings.RESULTS_DIR + current_time + "/"
@@ -207,15 +122,11 @@ if __name__ == "__main__":
     print("Loaded model from:", params.model_path)
 
     # Load data to evaluate over (just training data for now)
+    print("Evaluation running on data stored at:", settings.EVALUATION_DATA_DIR)
     transform = transforms.Compose([ToTensor(), Normalise(), FixSampleSize()])
     dataset = SingleDataset(root_dir=settings.EVALUATION_DATA_DIR, transform=transform)
 
     data_loader = DataLoader(dataset, batch_size=1,  # not sure if batch size here needs to be only 1
                              shuffle=False, num_workers=1)
 
-    # debugging_with_plots(model, data_loader)
     do_prediction_and_optionally_export_csv(model, data_loader, results_path)
-    # do_quick_plot_from_csv_files(gt_csv_file=settings.DATA_DIR + "training/gt_poses.csv",
-    #                              raw_csv_file=results_path + "raw_cm_poses.csv",
-    #                              pred_csv_file=results_path + "corrections_cm_poses.csv",
-    #                              export_path=results_path)

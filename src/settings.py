@@ -53,7 +53,3 @@ else:
 folder_date_name = "2019-01-10-15-19-41"
 RO_STATE_PATH = "/workspace/data/ro-state-files/radar_oxford_10k/" + folder_date_name + "/"
 LANDMARK_CSV_EXPORT_PATH = "/workspace/data/landmark-dewarping/landmark-data/datasets/" + folder_date_name + "/"
-
-PLOTTING_ITR = 0
-CORRECTION_PLOTTING_ITR = 0
-GRAD_PLOTTING_ITR = 0
