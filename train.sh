@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=1 python src/train.py --model_name="pointnet" --max_num_epochs 200 --gpus 1 && python src/make_predictions.py
+CUDA_VISIBLE_DEVICES=1 python src/train.py --model_name="scorenet" --max_num_epochs 30 --gpus 1 && python src/make_predictions.py

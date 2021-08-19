@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 from pathlib import Path
 from pointnet import PointNet
+from scorenet import ScoreNet
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from pointnet_dataloader import SingleDataset, ToTensor, Normalise, FixSampleSize
@@ -16,8 +17,9 @@ import time
 
 def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_csv_export=True):
     raw_pose_results = []
-    dewarped_pose_results = []
-    num_samples = min(len(data_loader.dataset), settings.TOTAL_SAMPLES)
+    network_pose_results = []
+    # num_samples = min(len(data_loader.dataset), settings.TOTAL_SAMPLES)
+    num_samples = 20
     quantile_width = 0.3
     quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
     print("Running for", num_samples, "samples...")
@@ -49,30 +51,11 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
         final_pose = [d_x.mean().detach().numpy(), d_y.mean().detach().numpy(), selected_thetas.mean().detach().numpy()]
         raw_pose_results.append(final_pose)
 
+        # ------------------------- Network predictions -------------------------#
         # Get Circular Motion Estimates from from landmarks that have been corrected by network
-        prediction, corrected_landmarks = model(landmarks)
-        prediction = prediction.detach().squeeze(0)
-        dewarped_thetas = prediction[:, 0]
-        dewarped_curvatures = prediction[:, 1]
-
-        # Grab indices where theta is in a certain acceptable range
-        # theta_quantiles = torch.quantile(dewarped_thetas, quantiles)
-        # inlier_indices = torch.where((dewarped_thetas > theta_quantiles[0]) & (dewarped_thetas < theta_quantiles[1]))
-        # Find dx, dy, dth for these indices
-        selected_thetas = dewarped_thetas  # dewarped_thetas[inlier_indices]
-        selected_radii = 1 / dewarped_curvatures.type(torch.FloatTensor)
-        # 1 / dewarped_curvatures[inlier_indices].type(torch.FloatTensor)
-
-        phi = selected_thetas / 2  # this is because we're enforcing circular motion
-        rho = 2 * selected_radii * torch.sin(phi)
-        d_x = rho * torch.cos(phi)  # forward motion
-        d_y = rho * torch.sin(phi)  # lateral motion
-        # Special cases
-        d_x[selected_radii == float('inf')] = 0
-        d_y[selected_radii == float('inf')] = 0
-
-        final_pose = [d_x.mean().detach().numpy(), d_y.mean().detach().numpy(), selected_thetas.mean().detach().numpy()]
-        dewarped_pose_results.append(final_pose)
+        predicted_poses = model(landmarks)
+        final_pose = predicted_poses.detach().numpy()[0]
+        network_pose_results.append(final_pose)
 
     # Get poses from raw CMEs
     raw_motion_estimates = []
@@ -89,16 +72,18 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
 
     # Get poses from predicted correction CMEs
     motion_estimates = []
-    for idx in range(len(dewarped_pose_results)):
-        x_est = dewarped_pose_results[idx][0]
-        y_est = dewarped_pose_results[idx][1]
-        th_est = dewarped_pose_results[idx][2]
+    pdb.set_trace()
+
+    for idx in range(len(network_pose_results)):
+        x_est = network_pose_results[idx][0]
+        y_est = network_pose_results[idx][1]
+        th_est = network_pose_results[idx][2]
         motion_estimates.append(
             MotionEstimate(theta=0, curvature=0, dx=x_est, dy=y_est, dth=th_est))
     if do_csv_export:
-        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(dewarped_pose_results)),
+        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(network_pose_results)),
                                        motion_estimates=motion_estimates,
-                                       pose_source="corrections_cm", export_folder=export_path)
+                                       pose_source="network_cm", export_folder=export_path)
 
 
 if __name__ == "__main__":
@@ -112,11 +97,11 @@ if __name__ == "__main__":
                         help='Path to model that will be used to make predictions')
 
     temp_args, _ = parser.parse_known_args()
-    parser = PointNet.add_model_specific_args(parser)
+    parser = ScoreNet.add_model_specific_args(parser)
     params = parser.parse_args()
 
     # Prepare model for evaluation
-    model = PointNet(params)
+    model = ScoreNet(params)
     model = model.load_from_checkpoint(params.model_path)
     model.eval()
     print("Loaded model from:", params.model_path)
