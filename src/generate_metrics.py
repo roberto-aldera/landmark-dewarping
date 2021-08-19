@@ -35,7 +35,7 @@ def get_metrics(params):
     _, aux0_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
         params.path + "raw_cm_poses.csv")
     _, aux1_x_y_th = get_timestamps_and_x_y_th_from_circular_motion_estimate_csv(
-        params.path + "corrections_cm_poses.csv")
+        params.path + "network_cm_poses.csv")
 
     # Cropping if necessary
     full_matches_timestamps, full_matches_x_y_th = full_matches_timestamps[:num_iterations], \

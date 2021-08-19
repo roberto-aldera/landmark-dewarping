@@ -18,8 +18,7 @@ import time
 def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_csv_export=True):
     raw_pose_results = []
     network_pose_results = []
-    # num_samples = min(len(data_loader.dataset), settings.TOTAL_SAMPLES)
-    num_samples = 20
+    num_samples = min(len(data_loader.dataset), settings.TOTAL_SAMPLES)
     quantile_width = 0.3
     quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
     print("Running for", num_samples, "samples...")
@@ -72,7 +71,6 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
 
     # Get poses from predicted correction CMEs
     motion_estimates = []
-    pdb.set_trace()
 
     for idx in range(len(network_pose_results)):
         x_est = network_pose_results[idx][0]
