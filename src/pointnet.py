@@ -98,16 +98,6 @@ class PointNetEncoder(nn.Module):
             return torch.cat([x, pointfeat], 1), trans_feat
 
 
-class weightedTanh(nn.Module):
-    def __init__(self, weights=1 / settings.MAX_LANDMARK_RANGE_METRES):
-        super().__init__()
-        self.weights = weights
-
-    def forward(self, input):
-        ex = torch.exp(2 * self.weights * input)
-        return (ex - 1) / (ex + 1)
-
-
 class PointNet(pl.LightningModule):
     def __init__(self, hparams):
         super(PointNet, self).__init__()
@@ -122,7 +112,6 @@ class PointNet(pl.LightningModule):
         self.bn1 = nn.BatchNorm1d(512)
         self.bn2 = nn.BatchNorm1d(256)
         self.bn3 = nn.BatchNorm1d(128)
-        # self.tanh = weightedTanh()
         self.net = nn.Sequential(self.conv1, self.bn1, nn.ReLU(), self.conv2, self.bn2, nn.ReLU(), self.conv3, self.bn3,
                                  nn.ReLU(), self.conv4)
 
