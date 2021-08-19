@@ -36,17 +36,6 @@ AUX1_NAME = "Corrected-CC"
 # Bools
 IS_RUNNING_ON_SERVER = True
 
-if IS_RUNNING_ON_SERVER:
-    DO_PLOTS_IN_LOSS = False
-    DO_PLOTS_IN_FORWARD_PASS = False
-    DO_CORRECTION_MAGNITUDE_PLOTS = False
-    DO_GRADIENT_PLOTS = False
-else:
-    DO_PLOTS_IN_LOSS = False
-    DO_PLOTS_IN_FORWARD_PASS = False
-    DO_CORRECTION_MAGNITUDE_PLOTS = False
-    DO_GRADIENT_PLOTS = False
-
 if IS_RUNNING_ON_SERVER is True:
     ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"
     DATA_DIR = "/workspace/data/landmark-dewarping/landmark-data/"

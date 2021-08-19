@@ -1,8 +1,6 @@
 # Source of original template compiled from here: https://github.com/yanx27/Pointnet_Pointnet2_pytorch
 import numpy as np
 import math
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 
 import torch
 import torch.nn as nn
@@ -17,41 +15,6 @@ from circular_motion_functions import CircularMotionEstimationBase
 from loss_functions import LossFunctionOnTheta, LossFunctionCMParameters, LossFunctionFinalPose
 from argparse import ArgumentParser
 import pdb
-
-
-def plot_grad_flow(named_parameters):
-    """
-    Plots the gradients flowing through different layers in the net during training.
-    Can be used for checking for possible gradient vanishing / exploding problems.
-
-    Usage: Plug this function in Trainer class after loss.backwards() as
-    "plot_grad_flow(self.model.named_parameters())" to visualize the gradient flow
-    """
-    ave_grads = []
-    max_grads = []
-    layers = []
-    for name, parameter in named_parameters:
-        if parameter.requires_grad and ("bias" not in name):
-            layers.append(name)
-            ave_grads.append(parameter.abs().mean().detach().numpy())
-            max_grads.append(parameter.abs().max().detach().numpy())
-    plt.figure(figsize=(10, 10))
-    plt.bar(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
-    plt.bar(np.arange(len(max_grads)), ave_grads, alpha=0.1, lw=1, color="b")
-    plt.hlines(0, 0, len(ave_grads) + 1, lw=2, color="k")
-    plt.xticks(range(0, len(ave_grads), 1), layers, rotation="vertical")
-    plt.xlim(left=0, right=len(ave_grads))
-    plt.ylim(bottom=-0.001, top=0.2)  # zoom in on the lower gradient regions
-    plt.xlabel("Layers")
-    plt.ylabel("average gradient")
-    plt.title("Gradient flow")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.legend([Line2D([0], [0], color="c", lw=4),
-                Line2D([0], [0], color="b", lw=4),
-                Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
-    plt.savefig("%s%s%i%s" % (settings.RESULTS_DIR, "gradients/", settings.GRAD_PLOTTING_ITR, "_gradients.pdf"))
-    plt.close()
 
 
 class STNkd(nn.Module):  # Spatial Transformer Network
@@ -198,80 +161,11 @@ class PointNet(pl.LightningModule):
         x = x.transpose(2, 1).contiguous()
         x = x.view(b, n, self.k)
 
-        # prediction_set = torch.zeros(b, n, c).to(self.device)
-        # prediction_set[:, :, 1] = x[:, :, 0]
-        # prediction_set[:, :, 3] = x[:, :, 1]
-        # # Trying to correct both here
-        # prediction_set[:, :, 0] = x[:, :, 2]
-        # prediction_set[:, :, 2] = x[:, :, 3]
-
-        if settings.DO_CORRECTION_MAGNITUDE_PLOTS:
-            import numpy as np
-            plt.figure(figsize=(10, 10))
-            plt.grid()
-            plt.title("Corrections in x and y position of each landmark")
-            plt.plot(np.array(x[:, :, 0].squeeze(0).detach().numpy()), 'rx', markersize=2, mew=0.3,
-                     label="y-correction")
-            plt.plot(np.array(x[:, :, 1].squeeze(0).detach().numpy()), 'b+', markersize=2, mew=0.3,
-                     label="x-correction")
-            plt.savefig("%s%s%i%s" % (
-                settings.RESULTS_DIR, "corrections/", settings.CORRECTION_PLOTTING_ITR, "_corrections.pdf"))
-            plt.close()
-            settings.CORRECTION_PLOTTING_ITR += 1
-
         landmark_positions = landmark_positions.transpose(1, 2)
-        # corrected_landmark_positions = landmark_positions.add(prediction_set)
         corrected_landmark_positions = landmark_positions.add(x)
 
         # Scale landmark positions back up to metres (after being between [-1, 1] for predictions)
         corrected_landmark_positions = torch.mul(corrected_landmark_positions, settings.MAX_LANDMARK_RANGE_METRES)
-
-        # Quick check
-        if settings.DO_PLOTS_IN_FORWARD_PASS:
-            import numpy as np
-            landmark_positions = landmark_positions * settings.MAX_LANDMARK_RANGE_METRES
-            alpha_val = 0.5
-            plt.figure(figsize=(5, 5))
-            plt.grid()
-            dim_metres = 75  # settings.MAX_LANDMARK_RANGE_METRES
-            plt.xlim(-dim_metres, dim_metres)
-            plt.ylim(-dim_metres, dim_metres)
-            plt.plot(np.array(landmark_positions[0, :, 1].detach().numpy()),
-                     np.array(landmark_positions[0, :, 3].detach().numpy()), 'b,', alpha=alpha_val,
-                     label="original_landmarks")
-            plt.plot(np.array(corrected_landmark_positions[0, :, 1].detach().numpy()),
-                     np.array(corrected_landmark_positions[0, :, 3].detach().numpy()), 'r,', alpha=alpha_val,
-                     label="corrected_landmarks")
-            plt.plot(np.array(landmark_positions[0, :, 0].detach().numpy()),
-                     np.array(landmark_positions[0, :, 2].detach().numpy()), 'g,', alpha=alpha_val,
-                     label="original_landmarks")
-            plt.plot(np.array(corrected_landmark_positions[0, :, 0].detach().numpy()),
-                     np.array(corrected_landmark_positions[0, :, 2].detach().numpy()), 'k,', alpha=alpha_val,
-                     label="corrected_landmarks")
-            plt.gca().set_aspect('equal', adjustable='box')
-            plt.legend()
-            plt.savefig("%s%s%i%s" % (
-                settings.RESULTS_DIR, "landmarks/", settings.PLOTTING_ITR, "_landmarks-and-corrections.pdf"))
-            plt.close()
-
-            original_thetas = self.cme(landmark_positions).squeeze(0)[:, 0]
-            corrected_thetas = self.cme(corrected_landmark_positions).squeeze(0)[:, 0]
-            plt.figure(figsize=(10, 7))
-            plt.grid()
-            plt.ylim(-0.2, 0.2)
-            plt.plot(np.sort(original_thetas.detach().numpy()), 'b+', markersize=2, mew=0.3, label="original_thetas")
-            plt.plot(np.sort(corrected_thetas.detach().numpy()), 'rx', markersize=2, mew=0.3, label="corrected_thetas")
-            # plt.plot(original_thetas.detach().numpy(), 'b.', markersize=2, label="original_thetas")
-            # plt.plot(corrected_thetas.detach().numpy(), 'rx', markersize=2, label="corrected_thetas")
-            plt.title("Sorted thetas from each match")
-            plt.ylabel("Theta (rad)")
-            plt.xlabel("Index")
-            plt.legend()
-            plt.savefig(
-                "%s%s%i%s" % (settings.RESULTS_DIR, "thetas/", settings.PLOTTING_ITR, "_thetas_for_a_sample.pdf"))
-            settings.PLOTTING_ITR += 1
-            plt.close()
-            # pdb.set_trace()
 
         return corrected_landmark_positions
 
@@ -287,22 +181,6 @@ class PointNet(pl.LightningModule):
         upper_index = int((settings.K_MAX_MATCHES + expected_number_of_inliers) / 2)
         x = torch.gather(x, 1, indices[:, lower_index:upper_index].to(self.device).unsqueeze(2).expand(-1, -1, 4))
 
-        # make_plots = False
-        # if make_plots:
-        #     cropped_thetas = torch.gather(estimated_thetas, 1, indices[:, lower_index:upper_index])
-        #     first_n_thetas = torch.index_select(estimated_thetas, 1, torch.arange(0, expected_number_of_inliers))
-        #     pdb.set_trace()
-        #     import numpy as np
-        #     plt.figure(figsize=(5, 5))
-        #     plt.grid()
-        #     plt.plot(np.array(np.sort(estimated_thetas[0, :].detach().numpy())), 'b,', label="original_thetas")
-        #     plt.plot(np.array(np.sort(cropped_thetas[0, :].detach().numpy())), 'r,', label="cropped_thetas")
-        #     plt.plot(np.array(np.sort(first_n_thetas[0, :].detach().numpy())), 'g,', label="n_thetas")
-        #     plt.legend()
-        #     plt.savefig("%s%s%i%s" % (
-        #         settings.RESULTS_DIR, "landmarks/", settings.PLOTTING_ITR, "_debugging-plot.pdf"))
-        #     plt.close()
-        #     pdb.set_trace()
         corrected_landmark_positions = self._forward(x)
         return self.cme(corrected_landmark_positions), corrected_landmark_positions
 
@@ -311,11 +189,6 @@ class PointNet(pl.LightningModule):
         prediction = self.forward(x)[0].to(self.device)
         loss = self.loss(prediction, y)
         self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-
-        if settings.DO_GRADIENT_PLOTS:
-            if settings.GRAD_PLOTTING_ITR > 0:
-                plot_grad_flow(self.named_parameters())
-            settings.GRAD_PLOTTING_ITR += 1
         return loss
 
     def validation_step(self, batch, batch_nb):
@@ -339,7 +212,6 @@ class PointNet(pl.LightningModule):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
         parser.add_argument('--learning_rate', default=settings.LEARNING_RATE, type=float)
         parser.add_argument('--batch_size', default=settings.BATCH_SIZE, type=int)
-        parser.add_argument('--dropout', default=0, type=float)
 
         # training specific (for this model)
         parser.add_argument('--max_num_epochs', default=settings.MAX_EPOCHS, type=int)
@@ -352,5 +224,5 @@ if __name__ == "__main__":
     hparams = {}
     net = PointNet(hparams)
     y = net._forward(x)[0]
-    plot_grad_flow(net.named_parameters())
+    # plot_grad_flow(net.named_parameters())
     pdb.set_trace()
