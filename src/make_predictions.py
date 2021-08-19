@@ -96,11 +96,12 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
         dewarped_curvatures = prediction[:, 1]
 
         # Grab indices where theta is in a certain acceptable range
-        theta_quantiles = torch.quantile(dewarped_thetas, quantiles)
-        inlier_indices = torch.where((dewarped_thetas > theta_quantiles[0]) & (dewarped_thetas < theta_quantiles[1]))
+        # theta_quantiles = torch.quantile(dewarped_thetas, quantiles)
+        # inlier_indices = torch.where((dewarped_thetas > theta_quantiles[0]) & (dewarped_thetas < theta_quantiles[1]))
         # Find dx, dy, dth for these indices
-        selected_thetas = dewarped_thetas[inlier_indices]
-        selected_radii = 1 / dewarped_curvatures[inlier_indices].type(torch.FloatTensor)
+        selected_thetas = dewarped_thetas  # dewarped_thetas[inlier_indices]
+        selected_radii = 1 / dewarped_curvatures.type(torch.FloatTensor)
+        # 1 / dewarped_curvatures[inlier_indices].type(torch.FloatTensor)
 
         phi = selected_thetas / 2  # this is because we're enforcing circular motion
         rho = 2 * selected_radii * torch.sin(phi)
@@ -191,22 +192,19 @@ if __name__ == "__main__":
     Path(results_path).mkdir(parents=True, exist_ok=True)
     print("Results will be saved to:", results_path)
     parser = ArgumentParser(add_help=False)
-    parser.add_argument('--model_name', type=str, default=settings.ARCHITECTURE_TYPE, help='cmnet or...')
+    parser.add_argument('--model_path', type=str,
+                        default="%s%s%s" % (settings.MODEL_DIR, settings.ARCHITECTURE_TYPE, ".ckpt"),
+                        help='Path to model that will be used to make predictions')
 
     temp_args, _ = parser.parse_known_args()
     parser = PointNet.add_model_specific_args(parser)
     params = parser.parse_args()
 
     # Prepare model for evaluation
-    # path_to_model = "/workspace/data/landmark-dewarping/models/best_val_models/epoch=35-step=4391.ckpt"
-    # path_to_model = "%s%s%s" % (settings.MODEL_DIR, params.model_name, ".ckpt")
-    # path_to_model = "/workspace/data/scratchdata/landmark-dewarping/models/pointnet.ckpt"
-    path_to_model = "/Volumes/scratchdata/roberto/landmark-dewarping/models/lightning_logs/version_185/checkpoints/epoch=176-step=40001.ckpt"
-
     model = PointNet(params)
-    model = model.load_from_checkpoint(path_to_model)
+    model = model.load_from_checkpoint(params.model_path)
     model.eval()
-    print("Loaded model from:", path_to_model)
+    print("Loaded model from:", params.model_path)
 
     # Load data to evaluate over (just training data for now)
     transform = transforms.Compose([ToTensor(), Normalise(), FixSampleSize()])

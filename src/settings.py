@@ -5,7 +5,7 @@ import numpy as np
 # Ensure reproducibility
 pl.seed_everything(0)
 
-K_MAX_MATCHES = 600
+K_MAX_MATCHES = 800
 # Setting this range to 1 effectively turns off normalisation
 MAX_LANDMARK_RANGE_METRES = 165  # 165  # 3768 bins at a resolution of 0.0438 cm per bin
 
@@ -22,19 +22,19 @@ ARCHITECTURE_TYPE = "pointnet"
 # Training parameters
 NUM_CPUS = 8
 MAX_EPOCHS = 5
-LEARNING_RATE = 1e-7
+LEARNING_RATE = 1e-8
 BATCH_SIZE = 128
 
 # Metrics
 K_RADAR_INDEX_OFFSET = 0
-AUX0_NAME = "RANSAC"
-AUX1_NAME = "CC-SVD"
-AUX2_NAME = "CC-means"
-# AUX0_NAME = "CC"
-# AUX1_NAME = "Corrected-CC"
+# AUX0_NAME = "RANSAC"
+# AUX1_NAME = "CC-SVD"
+# AUX2_NAME = "CC-means"
+AUX0_NAME = "CC"
+AUX1_NAME = "Corrected-CC"
 
 # Bools
-IS_RUNNING_ON_SERVER = False
+IS_RUNNING_ON_SERVER = True
 
 if IS_RUNNING_ON_SERVER:
     DO_PLOTS_IN_LOSS = False

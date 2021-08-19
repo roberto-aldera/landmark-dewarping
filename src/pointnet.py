@@ -282,27 +282,27 @@ class PointNet(pl.LightningModule):
         estimated_thetas = cme_parameters[:, :, 0].to(self.device).type(torch.FloatTensor)
         b, n, _ = cme_parameters.shape
         values, indices = estimated_thetas.sort()
-        expected_number_of_inliers = 200
+        expected_number_of_inliers = 300
         lower_index = int((settings.K_MAX_MATCHES - expected_number_of_inliers) / 2)
         upper_index = int((settings.K_MAX_MATCHES + expected_number_of_inliers) / 2)
-        x = x[(indices >= lower_index) & (indices < upper_index)].reshape(b, -1, 4)
+        x = torch.gather(x, 1, indices[:, lower_index:upper_index].to(self.device).unsqueeze(2).expand(-1, -1, 4))
 
-        make_plots = True
-        if make_plots:
-            cropped_thetas = torch.gather(estimated_thetas, 1, indices[:, lower_index:upper_index])
-            first_n_thetas = torch.index_select(estimated_thetas, 1, torch.arange(0, expected_number_of_inliers))
-            pdb.set_trace()
-            import numpy as np
-            plt.figure(figsize=(5, 5))
-            plt.grid()
-            plt.plot(np.array(np.sort(estimated_thetas[0, :].detach().numpy())), 'b,', label="original_thetas")
-            plt.plot(np.array(np.sort(cropped_thetas[0, :].detach().numpy())), 'r,', label="cropped_thetas")
-            plt.plot(np.array(np.sort(first_n_thetas[0, :].detach().numpy())), 'g,', label="n_thetas")
-            plt.legend()
-            plt.savefig("%s%s%i%s" % (
-                settings.RESULTS_DIR, "landmarks/", settings.PLOTTING_ITR, "_debugging-plot.pdf"))
-            plt.close()
-            pdb.set_trace()
+        # make_plots = False
+        # if make_plots:
+        #     cropped_thetas = torch.gather(estimated_thetas, 1, indices[:, lower_index:upper_index])
+        #     first_n_thetas = torch.index_select(estimated_thetas, 1, torch.arange(0, expected_number_of_inliers))
+        #     pdb.set_trace()
+        #     import numpy as np
+        #     plt.figure(figsize=(5, 5))
+        #     plt.grid()
+        #     plt.plot(np.array(np.sort(estimated_thetas[0, :].detach().numpy())), 'b,', label="original_thetas")
+        #     plt.plot(np.array(np.sort(cropped_thetas[0, :].detach().numpy())), 'r,', label="cropped_thetas")
+        #     plt.plot(np.array(np.sort(first_n_thetas[0, :].detach().numpy())), 'g,', label="n_thetas")
+        #     plt.legend()
+        #     plt.savefig("%s%s%i%s" % (
+        #         settings.RESULTS_DIR, "landmarks/", settings.PLOTTING_ITR, "_debugging-plot.pdf"))
+        #     plt.close()
+        #     pdb.set_trace()
         corrected_landmark_positions = self._forward(x)
         return self.cme(corrected_landmark_positions), corrected_landmark_positions
 

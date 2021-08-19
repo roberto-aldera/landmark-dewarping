@@ -13,12 +13,12 @@ class LossFunctionFinalPose(nn.Module):
         self.device = device
 
     def forward(self, estimate, target):
-        b, _, _ = estimate.shape
+        # b, _, _ = estimate.shape
         # Use thetas as a proxy for "best" matches (based on how well they are supported)
         estimated_thetas = estimate[:, :, 0].to(self.device)
-        b, n, _ = estimate.shape
+        # b, n, _ = estimate.shape
         # mask = torch.zeros(b, n, 3)
-        # quantiles = torch.tensor([0, 1]).to(self.device)
+        # quantiles = torch.tensor([0.35, 0.65]).to(self.device)
         # theta_quantiles = torch.quantile(estimated_thetas, quantiles, dim=1).transpose(0, 1)
         # mask[(estimated_thetas > theta_quantiles[:, 0].unsqueeze(1)) & (
         #         estimated_thetas < theta_quantiles[:, 1].unsqueeze(1))] = 1
@@ -54,12 +54,12 @@ class LossFunctionFinalPose(nn.Module):
         x_y_th_weights = torch.tensor([1, 1, 10])  # out of thin air for now
 
         weighted_pose_error = ((pose_estimate - pose_target) ** 2) * x_y_th_weights
-        masked_error = weighted_pose_error #* mask
-        nonzero_masked_error = masked_error[torch.abs(masked_error).sum(dim=2) != 0]
+        # masked_error = weighted_pose_error * mask
+        # nonzero_masked_error = masked_error[torch.abs(masked_error).sum(dim=2) != 0]
         # pel = torch.mean(nonzero_masked_error, dim=1)
         # pel = torch.mean(masked_error[mask != 0], axis=0)  # fix this mean so only nonzero elements are counted
         # loss = torch.mean(pel)
-        loss = torch.mean(nonzero_masked_error)
+        loss = torch.mean(weighted_pose_error)
         return loss
 
 
