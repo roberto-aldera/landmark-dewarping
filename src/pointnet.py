@@ -12,7 +12,7 @@ from torch.autograd import Variable
 import pytorch_lightning as pl
 import settings
 from circular_motion_functions import CircularMotionEstimationBase
-from loss_functions import LossFunctionOnTheta, LossFunctionCMParameters, LossFunctionFinalPose
+from loss_functions import LossFunctionFinalPose
 from argparse import ArgumentParser
 import pdb
 
