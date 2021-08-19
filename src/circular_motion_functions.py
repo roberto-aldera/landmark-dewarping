@@ -6,7 +6,6 @@ import csv
 from tqdm import tqdm
 import settings
 from torch.utils.data import DataLoader
-from custom_dataloader import LandmarkDataset, ToTensor, Normalise, SubsetSampling, ZeroPadding
 from torchvision import transforms
 
 
@@ -131,45 +130,45 @@ def do_quick_plot_from_csv_files(gt_csv_file, est_csv_file):
     plt.close()
 
 
-def check_cm_pipeline_and_optionally_export_csv(do_csv_export=False):
-    cm_estimator = CircularMotionEstimationBase()
-    transform = transforms.Compose([ToTensor(), SubsetSampling(), ZeroPadding()])
-    dataset = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
-                              transform=transform)
-    data_loader = DataLoader(dataset, batch_size=1,  # not sure if batch size here needs to be only 1
-                             shuffle=False, num_workers=4)
-
-    cm_estimates = []
-
-    for data in tqdm(data_loader):
-        landmarks, cm_parameters = data['landmarks'], data['cm_parameters']
-        cm_estimates.append(cm_estimator(landmarks))
-
-    # Assuming batch size = 1 for this checking section...
-    motion_estimates = []
-    for idx in range(len(cm_estimates)):
-        th_estimate = np.array(cm_estimates[idx].detach().numpy().squeeze(0)[0])
-        curvature_estimate = np.array(cm_estimates[idx].detach().numpy().squeeze(0)[1])
-        if curvature_estimate == 0:
-            r_estimate = np.inf
-        else:
-            r_estimate = 1 / curvature_estimate
-
-        se3_from_r_theta = get_transform_by_r_and_theta(r_estimate, th_estimate)
-        x_est = se3_from_r_theta[0, 3]
-        y_est = se3_from_r_theta[1, 3]
-        th_est = np.arctan2(se3_from_r_theta[1, 0], se3_from_r_theta[0, 0])
-        motion_estimates.append(
-            MotionEstimate(theta=th_estimate.item(), curvature=curvature_estimate.item(), dx=x_est, dy=y_est,
-                           dth=th_est))
-    if do_csv_export:
-        save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(cm_estimates)), motion_estimates=motion_estimates,
-                                       pose_source="cm-est", export_folder=settings.RESULTS_DIR)
+# def check_cm_pipeline_and_optionally_export_csv(do_csv_export=False):
+#     cm_estimator = CircularMotionEstimationBase()
+#     transform = transforms.Compose([ToTensor(), SubsetSampling(), ZeroPadding()])
+#     dataset = LandmarkDataset(root_dir=settings.DATA_DIR, is_training_data=True,
+#                               transform=transform)
+#     data_loader = DataLoader(dataset, batch_size=1,  # not sure if batch size here needs to be only 1
+#                              shuffle=False, num_workers=4)
+#
+#     cm_estimates = []
+#
+#     for data in tqdm(data_loader):
+#         landmarks, cm_parameters = data['landmarks'], data['cm_parameters']
+#         cm_estimates.append(cm_estimator(landmarks))
+#
+#     # Assuming batch size = 1 for this checking section...
+#     motion_estimates = []
+#     for idx in range(len(cm_estimates)):
+#         th_estimate = np.array(cm_estimates[idx].detach().numpy().squeeze(0)[0])
+#         curvature_estimate = np.array(cm_estimates[idx].detach().numpy().squeeze(0)[1])
+#         if curvature_estimate == 0:
+#             r_estimate = np.inf
+#         else:
+#             r_estimate = 1 / curvature_estimate
+#
+#         se3_from_r_theta = get_transform_by_r_and_theta(r_estimate, th_estimate)
+#         x_est = se3_from_r_theta[0, 3]
+#         y_est = se3_from_r_theta[1, 3]
+#         th_est = np.arctan2(se3_from_r_theta[1, 0], se3_from_r_theta[0, 0])
+#         motion_estimates.append(
+#             MotionEstimate(theta=th_estimate.item(), curvature=curvature_estimate.item(), dx=x_est, dy=y_est,
+#                            dth=th_est))
+#     if do_csv_export:
+#         save_timestamps_and_cme_to_csv(timestamps=np.zeros(len(cm_estimates)), motion_estimates=motion_estimates,
+#                                        pose_source="cm-est", export_folder=settings.RESULTS_DIR)
 
 
 if __name__ == "__main__":
     print("Running circular motion function script...")
-    check_cm_pipeline_and_optionally_export_csv(do_csv_export=True)
+    # check_cm_pipeline_and_optionally_export_csv(do_csv_export=True)
 
     do_quick_plot_from_csv_files(gt_csv_file="/workspace/data/landmark-dewarping/landmark-data/training/gt_poses.csv",
                                  est_csv_file="/workspace/data/landmark-dewarping/evaluation/cm-est_poses.csv")
