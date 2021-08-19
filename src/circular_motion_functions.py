@@ -26,8 +26,7 @@ class CircularMotionEstimationBase(torch.nn.Module):
         ranges, bearings = self.get_ranges_and_bearings_from_cartesian(x)
         # get theta, curvature for each range, bearing pair
         thetas, curvatures = self.get_thetas_and_curvatures_from_ranges_and_bearings(ranges, bearings)
-        # TODO -> returning all thetas and curvatures breaks things that are expecting single values
-        return torch.cat([thetas, curvatures], dim=2)  # dimensions here still TBD
+        return torch.cat([thetas, curvatures], dim=2)
 
     def get_ranges_and_bearings_from_cartesian(self, x):
         y2, y1, x2, x1 = torch.split(x, 1, dim=2)
@@ -49,9 +48,7 @@ class CircularMotionEstimationBase(torch.nn.Module):
         thetas = 2 * torch.atan((-torch.sin(a2) + (r1 / r2) * torch.sin(a1)) / theta_denominator)
 
         # For radii: (2 * torch.sin(thetas / 2) * torch.sin(-a1 + (thetas / 2)))
-        # radii = torch.full(thetas.shape, float('inf'))  # gives us a starting point
         denominator = (2 * torch.sin(thetas / 2) * torch.sin(-a1 + (thetas / 2)))
-        # denominator[denominator == 0] = torch.finfo(denominator.dtype).tiny  # this is too tiny apparently
         denominator[denominator == 0] = 1e-9  # set to a tiny number for now
         radii = (r2 * torch.sin(a1 - a2 - thetas)) / denominator
         radii.masked_fill_(stationary_landmark_mask, float('inf'))
