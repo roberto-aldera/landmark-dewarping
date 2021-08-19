@@ -5,6 +5,7 @@ import torch
 import pytorch_lightning as pl
 import pdb
 from circular_motion_functions import CircularMotionEstimationBase
+from loss_functions import LossFunctionFinalPoseVsCmeGt
 from argparse import ArgumentParser
 
 
@@ -20,15 +21,15 @@ class ScoreNet(pl.LightningModule):
         self.net = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, self.fc3, nn.Tanh())
 
         self.cme = CircularMotionEstimationBase()
+        self.loss = LossFunctionFinalPoseVsCmeGt(self.device)
 
     def forward(self, x):
         # Get CME parameters here so network feeds directly on CME data (possibly just thetas for now)
         x_cme_parameters = self.cme(x)
-        x_thetas = x_cme_parameters[:, :, 0]
+        x_thetas = x_cme_parameters[:, :, 0].to(self.device).type(torch.FloatTensor)
 
-        scores = self.net(x_thetas)
+        scores = self.net(x_thetas.to(self.device))  # TODO -> perhaps initialise scores to all be same value?
         scores = scores / (torch.sum(scores, dim=1).unsqueeze(1))  # maybe a softmax later
-        pdb.set_trace()
 
         # Get poses, and then weight each match by the score
         thetas = x_cme_parameters[:, :, 0].type(torch.FloatTensor)
@@ -44,26 +45,24 @@ class ScoreNet(pl.LightningModule):
         d_y[radii == float('inf')] = 0
 
         # Weight all dx, dy, dth by the (normalised) scores, and sum to get final pose
-        d_x = d_x * scores
-        d_y = d_y * scores
-        d_th = thetas * scores
-        final_pose = [torch.sum(d_x), torch.sum(d_y), torch.sum(d_th)]
+        d_x = d_x.to(self.device) * scores
+        d_y = d_y.to(self.device) * scores
+        d_th = thetas.to(self.device) * scores
+
+        final_pose = torch.cat((torch.sum(d_x, dim=1).unsqueeze(1), torch.sum(d_y, dim=1).unsqueeze(1),
+                                torch.sum(d_th, dim=1).unsqueeze(1)), dim=1)
 
         return final_pose
 
     def training_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        b, n, c = x.shape
-        y = torch.tile(y.unsqueeze(1), (1, n, 1))
-        loss = func.mse_loss(self.forward(x).to(self.device), y)
+        loss = self.loss(self.forward(x), y)
         self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        b, n, c = x.shape
-        y = torch.tile(y.unsqueeze(1), (1, n, 1))
-        loss = func.mse_loss(self.forward(x).to(self.device), y)
+        loss = self.loss(self.forward(x), y)
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 

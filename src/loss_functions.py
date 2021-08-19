@@ -1,5 +1,30 @@
 import torch
 import torch.nn as nn
+import pdb
+
+
+class LossFunctionFinalPoseVsCmeGt(nn.Module):
+    def __init__(self, device):
+        super().__init__()
+        self.device = device
+
+    def forward(self, estimate, target):
+        # Convert target to x, y, theta
+        target = target.to(self.device)
+        gt_theta = target[:, 0]
+        target[target[:, 1] == 0] = 1e-9
+        gt_radius = 1 / target[:, 1]
+
+        phi = gt_theta / 2  # this is because we're enforcing circular motion
+        rho = 2 * gt_radius * torch.sin(phi)
+        d_x = rho * torch.cos(phi)  # forward motion
+        d_y = rho * torch.sin(phi)  # lateral motion
+        pose_target = torch.cat((d_x.unsqueeze(1), d_y.unsqueeze(1), gt_theta.unsqueeze(1)), dim=1).to(self.device)
+
+        x_y_th_weights = torch.tensor([1, 1, 1]).to(self.device)  # out of thin air for now
+        weighted_pose_error = ((estimate.to(self.device) - pose_target) ** 2) * x_y_th_weights
+        loss = torch.mean(weighted_pose_error)
+        return loss
 
 
 class LossFunctionFinalPose(nn.Module):
