@@ -18,7 +18,7 @@ class ScoreNet(pl.LightningModule):
         self.fc1 = nn.Linear(in_features=settings.K_MAX_MATCHES * 1, out_features=settings.K_MAX_MATCHES * 4)
         self.fc2 = nn.Linear(in_features=settings.K_MAX_MATCHES * 4, out_features=settings.K_MAX_MATCHES * 2)
         self.fc3 = nn.Linear(in_features=settings.K_MAX_MATCHES * 2, out_features=settings.K_MAX_MATCHES * 1)
-        self.net = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, self.fc3, nn.Tanh())
+        self.net = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, self.fc3, nn.Softmax(dim=-1))
 
         self.cme = CircularMotionEstimationBase()
         self.loss = LossFunctionFinalPoseVsCmeGt(self.device)
@@ -27,9 +27,7 @@ class ScoreNet(pl.LightningModule):
         # Get CME parameters here so network feeds directly on CME data (possibly just thetas for now)
         x_cme_parameters = self.cme(x)
         x_thetas = x_cme_parameters[:, :, 0].to(self.device).type(torch.FloatTensor)
-
-        scores = self.net(x_thetas.to(self.device))  # TODO -> perhaps initialise scores to all be same value?
-        scores = scores / (torch.sum(scores, dim=1).unsqueeze(1))  # maybe a softmax later
+        scores = self.net(x_thetas.to(self.device))
 
         # Get poses, and then weight each match by the score
         thetas = x_cme_parameters[:, :, 0].type(torch.FloatTensor)

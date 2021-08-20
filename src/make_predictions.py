@@ -18,6 +18,7 @@ import time
 def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_csv_export=True):
     raw_pose_results = []
     network_pose_results = []
+    # num_samples = 500
     num_samples = min(len(data_loader.dataset), settings.TOTAL_SAMPLES)
     quantile_width = 0.3
     quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
