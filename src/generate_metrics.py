@@ -45,7 +45,7 @@ def get_metrics(params):
     # aux2_x_y_th = aux2_x_y_th[:num_iterations]
 
     # Just a sanity check here
-    do_quick_debugging_plot(aux0_x_y_th, aux1_x_y_th)
+    do_quick_debugging_plot(aux0_x_y_th, aux1_x_y_th, params)
 
     full_matches_se3s = get_raw_se3s_from_x_y_th(full_matches_x_y_th)
     aux0_se3s = get_raw_se3s_from_x_y_th(aux0_x_y_th)
@@ -229,7 +229,7 @@ def get_raw_se3s_from_x_y_th(x_y_th):
     return se3s
 
 
-def do_quick_debugging_plot(aux0_x_y_th, aux1_x_y_th):
+def do_quick_debugging_plot(aux0_x_y_th, aux1_x_y_th, params):
     x0 = []
     y0 = []
     th0 = []
@@ -249,7 +249,8 @@ def do_quick_debugging_plot(aux0_x_y_th, aux1_x_y_th):
     import matplotlib.pyplot as plt
     plt.figure(figsize=(15, 5))
     dim = settings.TOTAL_SAMPLES + 50
-    plt.xlim(0, 200)
+    plt.xlim(0, 1000)
+    plt.ylim(-1, 5)
     plt.grid()
     m_size = 5
     line_width = 0.5
@@ -269,7 +270,7 @@ def do_quick_debugging_plot(aux0_x_y_th, aux1_x_y_th):
     plt.xlabel("Sample index")
     plt.ylabel("units/sample")
     plt.legend()
-    quick_figure_for_debugging_path = "%s%s" % (settings.RESULTS_DIR, "quick_check_pose_predictions_comparison.pdf")
+    quick_figure_for_debugging_path = "%s%s" % (params.path, "quick_check_pose_predictions_comparison.pdf")
     plt.savefig(quick_figure_for_debugging_path)
     plt.close()
     print("Saved figure to:", quick_figure_for_debugging_path)
