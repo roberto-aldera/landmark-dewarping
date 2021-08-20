@@ -86,9 +86,10 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
 
 
 if __name__ == "__main__":
-    current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
-    results_path = settings.RESULTS_DIR + current_time + "/"
-    Path(results_path).mkdir(parents=True, exist_ok=True)
+    # current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
+    # results_path = settings.RESULTS_DIR + current_time + "/"
+    # Path(results_path).mkdir(parents=True, exist_ok=True)
+    results_path = None  # just to stop folders being created while debugging
     print("Results will be saved to:", results_path)
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--model_path', type=str,
@@ -100,10 +101,10 @@ if __name__ == "__main__":
     params = parser.parse_args()
 
     # Prepare model for evaluation
+    print("Loading model from:", params.model_path)
     model = ScoreNet(params)
     model = model.load_from_checkpoint(params.model_path)
     model.eval()
-    print("Loaded model from:", params.model_path)
 
     # Load data to evaluate over (just training data for now)
     print("Evaluation running on data stored at:", settings.EVALUATION_DATA_DIR)

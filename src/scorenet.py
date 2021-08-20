@@ -15,10 +15,11 @@ class ScoreNet(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.cme = CircularMotionEstimationBase()
-        self.fc1 = nn.Linear(in_features=settings.K_MAX_MATCHES * 1, out_features=settings.K_MAX_MATCHES * 4)
-        self.fc2 = nn.Linear(in_features=settings.K_MAX_MATCHES * 4, out_features=settings.K_MAX_MATCHES * 2)
-        self.fc3 = nn.Linear(in_features=settings.K_MAX_MATCHES * 2, out_features=settings.K_MAX_MATCHES * 1)
-        self.net = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, self.fc3, nn.Softmax(dim=-1))
+        self.fc1 = nn.Linear(in_features=settings.K_MAX_MATCHES * 1, out_features=settings.K_MAX_MATCHES * 6)
+        self.fc2 = nn.Linear(in_features=settings.K_MAX_MATCHES * 6, out_features=settings.K_MAX_MATCHES * 3)
+        self.fc3 = nn.Linear(in_features=settings.K_MAX_MATCHES * 3, out_features=settings.K_MAX_MATCHES * 1)
+        self.dropout = nn.Dropout(0.5)
+        self.net = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, self.dropout, self.fc3, nn.Softmax(dim=-1))
 
         self.cme = CircularMotionEstimationBase()
         self.loss = LossFunctionFinalPoseVsCmeGt(self.device)
@@ -49,6 +50,31 @@ class ScoreNet(pl.LightningModule):
 
         final_pose = torch.cat((torch.sum(d_x, dim=1).unsqueeze(1), torch.sum(d_y, dim=1).unsqueeze(1),
                                 torch.sum(d_th, dim=1).unsqueeze(1)), dim=1)
+
+        # Do some plotting
+        sorted_thetas, sorted_indices = torch.sort(x_cme_parameters[:, :, 0])
+
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+        ax[0].grid()
+        ax[0].plot(scores.detach().numpy()[0], '.', label="Scores")
+        ax[0].plot(torch.sort(scores)[0].detach().numpy()[0], '.', label="Sorted scores by magnitude")
+        ax[0].plot(sorted_indices[0], scores.detach().numpy()[0], '.', label="Sorted scores by sorted theta indices")
+        ax[0].legend()
+
+        ax[1].grid()
+        # ax[1].plot(sorted_thetas.detach().numpy()[0], '.')
+        ax[1].plot(scores.detach().numpy()[0], '.', label="Scores")
+        ax[1].plot(x_cme_parameters[:, :, 0].detach().numpy()[0], '.', label="Thetas")
+        ax[1].set_ylim(-0.01, 0.01)
+        # ax[1].set_xlim(0, 5)
+        ax[1].legend()
+
+        fig.suptitle("Debugging scores and their corresponding thetas")
+        fig.savefig("%s%s" % (settings.RESULTS_DIR, "debugging.pdf"))
+        plt.close()
+        print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "debugging.pdf"))
+        pdb.set_trace()
 
         return final_pose
 
