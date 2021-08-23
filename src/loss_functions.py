@@ -3,6 +3,26 @@ import torch.nn as nn
 import pdb
 
 
+class LossFunctionClassification(nn.Module):
+    def __init__(self, device):
+        super().__init__()
+        self.device = device
+
+    def forward(self, scores_and_thetas):
+        scores = scores_and_thetas[0]
+        thetas = scores_and_thetas[1]
+
+        # Grab indices where theta is in a certain acceptable range
+        quantile_width = 0.3
+        quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
+        theta_quantiles = torch.quantile(thetas, quantiles)
+        y_target = torch.where(((thetas >= theta_quantiles[0]) & (thetas <= theta_quantiles[1])), 1., 0.)
+
+        loss_function = nn.BCEWithLogitsLoss()
+        loss = loss_function(scores, y_target)
+        return loss
+
+
 class LossFunctionFinalPoseVsCmeGt(nn.Module):
     def __init__(self, device):
         super().__init__()
@@ -21,6 +41,7 @@ class LossFunctionFinalPoseVsCmeGt(nn.Module):
         d_y = rho * torch.sin(phi)  # lateral motion
         pose_target = torch.cat((d_x.unsqueeze(1), d_y.unsqueeze(1), gt_theta.unsqueeze(1)), dim=1).to(self.device)
 
+        # ------------------------- Process network outputs -------------------------#
         x_y_th_weights = torch.tensor([1, 1, 1]).to(self.device)  # out of thin air for now
         weighted_pose_error = ((estimate.to(self.device) - pose_target) ** 2) * x_y_th_weights
         loss = torch.mean(weighted_pose_error)
