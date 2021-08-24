@@ -48,6 +48,13 @@ class SingleDataset:
     def __init__(self, root_dir, transform=None):
         self.data_root = root_dir
         self.transform = transform
+        self.training_set_size = 0
+        self.validation_set_size = 0
+
+        landmark_folder = self.data_root + "exported_matched_landmarks/"
+        num_instances = len(os.listdir(landmark_folder))
+        self.training_set_size = int(num_instances * settings.TRAIN_RATIO)
+        self.validation_set_size = num_instances - self.training_set_size
 
     def __len__(self):
         landmark_folder = self.data_root + "exported_matched_landmarks/"
@@ -130,7 +137,10 @@ class LandmarksDataModule(pl.LightningDataModule):
     #     raise NotImplementedError
 
     def setup(self, stage=None):
-        data_full = CustomDataset(data_root=settings.DATA_DIR, transform=self.transform)
+        # data_full = CustomDataset(data_root=settings.DATA_DIR, transform=self.transform)
+
+        # Using just a single dataset for quicker training here:
+        data_full = SingleDataset(root_dir=settings.EVALUATION_DATA_DIR, transform=self.transform)
 
         self.train_data, self.valid_data = random_split(data_full,
                                                         [data_full.training_set_size, data_full.validation_set_size])
