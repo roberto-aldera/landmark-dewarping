@@ -22,7 +22,7 @@ ARCHITECTURE_TYPE = "scorenet"
 # Training parameters
 NUM_CPUS = 8
 MAX_EPOCHS = 5
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
 # Metrics
@@ -34,10 +34,11 @@ AUX0_NAME = "CC"
 AUX1_NAME = "Corrected-CC"
 
 # Bools
-IS_RUNNING_ON_SERVER = False
+IS_RUNNING_ON_SERVER = True
 
 if IS_RUNNING_ON_SERVER is True:
-    ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"
+    # ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"
+    ROOT_DIR = "/workspace/outputs/landmark-dewarping/"
     DATA_DIR = "/workspace/data/landmark-dewarping/landmark-data/"
     EVALUATION_DATA_DIR = "/workspace/data/landmark-dewarping/landmark-data/datasets/2019-01-10-11-46-21/"
     MODEL_DIR = ROOT_DIR + "models/"

@@ -29,10 +29,11 @@ class ScoreNet(pl.LightningModule):
         # Get CME parameters here so network feeds directly on CME data (possibly just thetas for now)
         x_cme_parameters = self.cme(x)
         x_thetas = x_cme_parameters[:, :, 0].to(self.device).type(torch.FloatTensor)
-        scores = self.net(x_thetas.to(self.device))
+        thetas = x_thetas  # * 1e4
+        scores = self.net(thetas.to(self.device))
 
         # Get poses, and then weight each match by the score
-        thetas = x_cme_parameters[:, :, 0].type(torch.FloatTensor)
+        # thetas = x_cme_parameters[:, :, 0].type(torch.FloatTensor)
         # curvatures = x_cme_parameters[:, :, 1].type(torch.FloatTensor)
         # radii = 1 / curvatures.type(torch.FloatTensor)
         #
@@ -53,7 +54,7 @@ class ScoreNet(pl.LightningModule):
         #                         torch.sum(d_th, dim=1).unsqueeze(1)), dim=1)
 
         # Do some plotting
-        # plot_scores_and_thetas(scores, x_cme_parameters[:, :, 0])
+        # plot_scores_and_thetas(scores, thetas)
         # pdb.set_trace()
 
         return scores, thetas

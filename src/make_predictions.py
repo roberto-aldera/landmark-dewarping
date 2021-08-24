@@ -53,9 +53,10 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
 
         # ------------------------- Network predictions -------------------------#
         # Get Circular Motion Estimates from from landmarks that have been corrected by network
-        predicted_poses = model(landmarks)
-        final_pose = predicted_poses.detach().numpy()[0]
-        network_pose_results.append(final_pose)
+        predicted_scores = model(landmarks)
+
+        # final_pose = predicted_poses.detach().numpy()[0]
+        # network_pose_results.append(final_pose)
 
     # Get poses from raw CMEs
     raw_motion_estimates = []

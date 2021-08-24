@@ -49,14 +49,23 @@ def plot_scores_and_thetas(scores, thetas):
     ax[0].grid()
     ax[0].plot(scores.detach().numpy()[0], '.', label="Scores")
     ax[0].plot(torch.sort(scores)[0].detach().numpy()[0], '.', label="Sorted scores by magnitude")
-    ax[0].plot(sorted_indices[0], scores.detach().numpy()[0], '.', label="Sorted scores by sorted theta indices")
+    ax[0].plot(sorted_indices[0], scores.detach().numpy()[0], '.', label="Scores in order of sorted thetas")
+    # ax[0].plot(sorted_thetas[0], '.', label="Sorted thetas")
     ax[0].legend()
 
     ax[1].grid()
     # ax[1].plot(sorted_thetas.detach().numpy()[0], '.')
-    ax[1].plot(scores.detach().numpy()[0], '.', label="Scores")
-    ax[1].plot(thetas.detach().numpy()[0], '.', label="Thetas")
-    ax[1].set_ylim(-0.01, 0.01)
+    scores = scores.detach().numpy()[0]
+    thetas_np = thetas.detach().numpy()[0]
+    threshold = 2.75
+    candidates = np.where(scores > threshold)
+    inliers = scores[candidates]
+
+    # ax[1].plot(scores, '.', label="Scores")
+    ax[1].plot(thetas_np[candidates], '.', label="Thetas")
+    # ax[1].plot(thetas_np, '.', label="All thetas")
+    # ax[1].plot(np.sort(thetas_np), '.', label="Sorted thetas")
+    # ax[1].set_ylim(-0.01, 0.01)
     # ax[1].set_xlim(0, 5)
     ax[1].legend()
 
@@ -64,3 +73,4 @@ def plot_scores_and_thetas(scores, thetas):
     fig.savefig("%s%s" % (settings.RESULTS_DIR, "debugging.pdf"))
     plt.close()
     print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "debugging.pdf"))
+    pdb.set_trace()
