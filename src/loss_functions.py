@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import pdb
+import settings
 
 
 class LossFunctionClassification(nn.Module):
@@ -13,13 +14,45 @@ class LossFunctionClassification(nn.Module):
         thetas = scores_and_thetas[1]
 
         # Grab indices where theta is in a certain acceptable range
-        quantile_width = 0.3
+        quantile_width = 0.75
         quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
         theta_quantiles = torch.quantile(thetas, quantiles)
         y_target = torch.where(((thetas >= theta_quantiles[0]) & (thetas <= theta_quantiles[1])), 1., 0.)
 
+        do_loss_plots = False
+        if do_loss_plots:
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+            ax[0].grid()
+            ax[0].plot(thetas[0], '.', label="Thetas")
+            ax[0].plot(thetas[0][y_target[0] == 1], '.', label="Inner thetas")
+            # ax[0].plot(sorted_thetas[0], '.', label="Sorted thetas")
+            ax[0].legend()
+
+            # ax[1].grid()
+            # # ax[1].plot(sorted_thetas.detach().numpy()[0], '.')
+            # scores = scores.detach().numpy()[0]
+            # thetas_np = thetas.detach().numpy()[0]
+            # threshold = 2
+            # candidates = np.where(scores > threshold)
+            # inliers = scores[candidates]
+
+            # ax[1].plot(scores, '.', label="Scores")
+            # ax[1].plot(thetas_np[candidates], '.', label="Thetas")
+            # ax[1].plot(thetas_np, '.', label="All thetas")
+            # ax[1].plot(np.sort(thetas_np), '.', label="Sorted thetas")
+            # ax[1].set_ylim(-0.01, 0.01)
+            # ax[1].set_xlim(0, 5)
+            # ax[1].legend()
+
+            fig.suptitle("Debugging scores and their corresponding thetas")
+            fig.savefig("%s%s" % (settings.RESULTS_DIR, "loss_debugging.pdf"))
+            plt.close()
+            print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "loss_debugging.pdf"))
+            pdb.set_trace()
+
         loss_function = nn.BCEWithLogitsLoss()
-        loss = loss_function(scores, y_target)
+        loss = loss_function(scores.to(self.device), y_target.to(self.device))
         return loss
 
 
