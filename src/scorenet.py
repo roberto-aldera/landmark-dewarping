@@ -6,8 +6,8 @@ import pytorch_lightning as pl
 import pdb
 from argparse import ArgumentParser
 from circular_motion_functions import CircularMotionEstimationBase
-from loss_functions import LossFunctionClassification
-from utilities import plot_scores_and_thetas
+from loss_functions import LossFunctionQuantiles
+from utilities import plot_scores_and_thetas, plot_quantiles_and_thetas, plot_theta_clusters
 
 
 class ScoreNet(pl.LightningModule):
@@ -16,21 +16,29 @@ class ScoreNet(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.cme = CircularMotionEstimationBase()
-        self.fc1 = nn.Linear(in_features=settings.K_MAX_MATCHES * 1, out_features=settings.K_MAX_MATCHES * 6)
-        self.fc2 = nn.Linear(in_features=settings.K_MAX_MATCHES * 6, out_features=settings.K_MAX_MATCHES * 3)
-        self.fc3 = nn.Linear(in_features=settings.K_MAX_MATCHES * 3, out_features=settings.K_MAX_MATCHES * 1)
-        self.dropout = nn.Dropout(0.5)
-        self.net = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, self.dropout, self.fc3)
+        # self.fc1 = nn.Linear(in_features=settings.K_MAX_MATCHES * 1, out_features=settings.K_MAX_MATCHES * 6)
+        # self.fc2 = nn.Linear(in_features=settings.K_MAX_MATCHES * 6, out_features=settings.K_MAX_MATCHES * 3)
+        # self.fc3 = nn.Linear(in_features=settings.K_MAX_MATCHES * 3, out_features=2)
+        # self.dropout = nn.Dropout(0.5)
+        # self.net = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, self.dropout, self.fc3)
+        # self.net = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, self.fc3)
+        self.net = torch.nn.Sequential(
+            torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 1, out_features=settings.K_MAX_MATCHES * 6),
+            torch.nn.LeakyReLU(),
+            torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 6, out_features=settings.K_MAX_MATCHES * 3),
+            torch.nn.LeakyReLU(),
+            torch.nn.Linear(in_features=settings.K_MAX_MATCHES * 3, out_features=2),
+        )
 
         self.cme = CircularMotionEstimationBase()
-        self.loss = LossFunctionClassification(self.device)
+        self.loss = LossFunctionQuantiles(self.device)
 
     def forward(self, x):
         # Get CME parameters here so network feeds directly on CME data (possibly just thetas for now)
         x_cme_parameters = self.cme(x)
         x_thetas = x_cme_parameters[:, :, 0].to(self.device).type(torch.FloatTensor)
         thetas = x_thetas  # * 1e4
-        scores = self.net(thetas.to(self.device))
+        predicted_quantiles = self.net(thetas.to(self.device))
 
         # Get poses, and then weight each match by the score
         # thetas = x_cme_parameters[:, :, 0].type(torch.FloatTensor)
@@ -54,10 +62,13 @@ class ScoreNet(pl.LightningModule):
         #                         torch.sum(d_th, dim=1).unsqueeze(1)), dim=1)
 
         # Do some plotting
-        # plot_scores_and_thetas(scores, thetas)
+        if not settings.IS_RUNNING_ON_SERVER:
+            # plot_scores_and_thetas(scores, thetas)
+            # plot_quantiles_and_thetas(predicted_quantiles, thetas)
+            plot_theta_clusters(predicted_quantiles, thetas)
         # pdb.set_trace()
 
-        return scores, thetas
+        return predicted_quantiles, thetas
 
     def training_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']

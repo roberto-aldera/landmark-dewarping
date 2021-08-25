@@ -4,6 +4,32 @@ import pdb
 import settings
 
 
+class LossFunctionQuantiles(nn.Module):
+    def __init__(self, device):
+        super().__init__()
+        self.device = device
+
+    def forward(self, quantiles_and_thetas):
+        predicted_quantiles = quantiles_and_thetas[0]
+        thetas = quantiles_and_thetas[1]
+        b, n = thetas.shape
+
+        # Grab indices where theta is in a certain acceptable range
+        quantile_width = 0.3
+        quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
+        theta_quantiles = torch.quantile(thetas, quantiles)
+        theta_quantiles = torch.tile(theta_quantiles, (b, 1))
+
+        # loss_function = nn.MSELoss()
+        # loss = loss_function(predicted_quantiles.to(self.device), theta_quantiles.to(self.device))
+
+        # pdb.set_trace()
+        error = (theta_quantiles.to(self.device) - predicted_quantiles.to(self.device))
+        loss = torch.sum(torch.mean(torch.max(quantiles * error, (quantiles - 1) * error), axis=0))
+
+        return loss
+
+
 class LossFunctionClassification(nn.Module):
     def __init__(self, device):
         super().__init__()

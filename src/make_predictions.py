@@ -51,9 +51,35 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
         final_pose = [d_x.mean().detach().numpy(), d_y.mean().detach().numpy(), selected_thetas.mean().detach().numpy()]
         raw_pose_results.append(final_pose)
 
+        # ------------------------- Fancier method here -------------------------#
+        from sklearn.cluster import KMeans
+        # from statistics import mode
+        from collections import Counter
+        kmeans = KMeans(n_clusters=8, random_state=0, tol=1e-6).fit(raw_thetas.reshape(-1, 1))
+        # pdb.set_trace()
+        counter = Counter(kmeans.labels_)
+        biggest_cluster_idx = counter.most_common(1)[0][0]  # just take first biggest for now
+        # biggest_cluster_idx = mode(kmeans.labels_)  # TODO: if two clusters are both same size, use both
+        # -> maybe if clusters are similar size, use both. So if second biggest is like 95% the same size or something
+
+        thetas_in_largest_cluster = raw_thetas[kmeans.labels_ == biggest_cluster_idx]
+        radii_in_largest_cluster = 1 / raw_curvatures[kmeans.labels_ == biggest_cluster_idx].type(torch.FloatTensor)
+
+        phi = thetas_in_largest_cluster / 2  # this is because we're enforcing circular motion
+        rho = 2 * radii_in_largest_cluster * torch.sin(phi)
+        d_x = rho * torch.cos(phi)  # forward motion
+        d_y = rho * torch.sin(phi)  # lateral motion
+        # Special cases
+        d_x[radii_in_largest_cluster == float('inf')] = 0
+        d_y[radii_in_largest_cluster == float('inf')] = 0
+
+        final_pose = [d_x.mean().detach().numpy(), d_y.mean().detach().numpy(),
+                      thetas_in_largest_cluster.mean().detach().numpy()]
+        network_pose_results.append(final_pose)
+
         # ------------------------- Network predictions -------------------------#
         # Get Circular Motion Estimates from from landmarks that have been corrected by network
-        predicted_scores = model(landmarks)
+        # predicted_scores = model(landmarks)
 
         # final_pose = predicted_poses.detach().numpy()[0]
         # network_pose_results.append(final_pose)
@@ -87,10 +113,10 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
 
 
 if __name__ == "__main__":
-    # current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
-    # results_path = settings.RESULTS_DIR + current_time + "/"
-    # Path(results_path).mkdir(parents=True, exist_ok=True)
-    results_path = None  # just to stop folders being created while debugging
+    current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
+    results_path = settings.RESULTS_DIR + current_time + "/"
+    Path(results_path).mkdir(parents=True, exist_ok=True)
+    # results_path = None  # just to stop folders being created while debugging
     print("Results will be saved to:", results_path)
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--model_path', type=str,

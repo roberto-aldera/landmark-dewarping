@@ -74,3 +74,73 @@ def plot_scores_and_thetas(scores, thetas):
     plt.close()
     print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "debugging.pdf"))
     pdb.set_trace()
+
+
+def plot_quantiles_and_thetas(predicted_quantiles, thetas):
+    quantile_width = 0.75
+    quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
+    real_quantiles = torch.quantile(thetas, quantiles)
+
+    inner_thetas = thetas[((thetas >= real_quantiles[0]) & (thetas <= real_quantiles[1]))]
+    predicted_inner_thetas = thetas[((thetas >= predicted_quantiles[0, 0]) & (thetas <= predicted_quantiles[0, 1]))]
+
+    sorted_thetas, sorted_indices = torch.sort(thetas)
+
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+    ax[0].grid()
+    ax[0].plot(sorted_thetas[0], '.', label="sorted thetas")
+    ax[0].plot(inner_thetas, '.', label="inner thetas")
+    ax[0].legend()
+
+    ax[1].grid()
+    ax[1].plot(predicted_inner_thetas, '.', label="predicted inner thetas")
+    # ax[1].set_ylim(-0.01, 0.01)
+    # ax[1].set_xlim(0, 5)
+    ax[1].legend()
+
+    fig.suptitle("Debugging scores and their corresponding thetas")
+    fig.savefig("%s%s" % (settings.RESULTS_DIR, "debugging-quantiles.pdf"))
+    plt.close()
+    print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "debugging-quantiles.pdf"))
+    pdb.set_trace()
+
+
+def plot_theta_clusters(predicted_quantiles, thetas):
+    quantile_width = 0.75
+    quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
+    real_quantiles = torch.quantile(thetas, quantiles)
+
+    inner_thetas = thetas[((thetas >= real_quantiles[0]) & (thetas <= real_quantiles[1]))]
+    predicted_inner_thetas = thetas[((thetas >= predicted_quantiles[0, 0]) & (thetas <= predicted_quantiles[0, 1]))]
+
+    sorted_thetas, sorted_indices = torch.sort(thetas)
+
+    from sklearn.cluster import KMeans
+    kmeans = KMeans(n_clusters=8, random_state=0, tol=1e-6).fit(thetas[0].reshape(-1, 1))
+
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+    ax[0].grid()
+    ax[0].plot(sorted_thetas[0], '.', label="sorted thetas")
+    ax[0].plot(inner_thetas, '.', label="inner thetas")
+    ax[0].legend()
+
+    ax[1].grid()
+    ax[1].plot(thetas[0][kmeans.labels_ == 0], '.', label="c0")
+    ax[1].plot(thetas[0][kmeans.labels_ == 1], '.', label="c1")
+    ax[1].plot(thetas[0][kmeans.labels_ == 2], '.', label="c2")
+    ax[1].plot(thetas[0][kmeans.labels_ == 3], '.', label="c3")
+    ax[1].plot(thetas[0][kmeans.labels_ == 4], '.', label="c4")
+    ax[1].plot(thetas[0][kmeans.labels_ == 5], '.', label="c5")
+    ax[1].plot(thetas[0][kmeans.labels_ == 6], '.', label="c6")
+    ax[1].plot(thetas[0][kmeans.labels_ == 7], '.', label="c7")
+    # ax[1].set_ylim(-0.01, 0.01)
+    # ax[1].set_xlim(0, 5)
+    ax[1].legend()
+
+    fig.suptitle("Debugging scores and their corresponding thetas")
+    fig.savefig("%s%s" % (settings.RESULTS_DIR, "debugging-clustering.pdf"))
+    plt.close()
+    print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "debugging-clustering.pdf"))
+    pdb.set_trace()
