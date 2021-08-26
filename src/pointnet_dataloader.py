@@ -137,10 +137,10 @@ class LandmarksDataModule(pl.LightningDataModule):
     #     raise NotImplementedError
 
     def setup(self, stage=None):
-        # data_full = CustomDataset(data_root=settings.DATA_DIR, transform=self.transform)
+        data_full = CustomDataset(data_root=settings.DATA_DIR, transform=self.transform)
 
         # Using just a single dataset for quicker training here:
-        data_full = SingleDataset(root_dir=settings.EVALUATION_DATA_DIR, transform=self.transform)
+        # data_full = SingleDataset(root_dir=settings.EVALUATION_DATA_DIR, transform=self.transform)
 
         self.train_data, self.valid_data = random_split(data_full,
                                                         [data_full.training_set_size, data_full.validation_set_size])

@@ -40,7 +40,7 @@ class LossFunctionClassification(nn.Module):
         thetas = scores_and_thetas[1]
 
         # Grab indices where theta is in a certain acceptable range
-        quantile_width = 0.75
+        quantile_width = 0.5
         quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
         theta_quantiles = torch.quantile(thetas, quantiles)
         y_target = torch.where(((thetas >= theta_quantiles[0]) & (thetas <= theta_quantiles[1])), 1., 0.)

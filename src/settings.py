@@ -37,8 +37,8 @@ AUX1_NAME = "Corrected-CC"
 IS_RUNNING_ON_SERVER = False
 
 if IS_RUNNING_ON_SERVER is True:
-    # ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"
-    ROOT_DIR = "/workspace/outputs/landmark-dewarping/"
+    ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"
+    # ROOT_DIR = "/workspace/outputs/landmark-dewarping/"
     DATA_DIR = "/workspace/data/landmark-dewarping/landmark-data/"
     EVALUATION_DATA_DIR = "/workspace/data/landmark-dewarping/landmark-data/datasets/2019-01-10-11-46-21/"
     MODEL_DIR = ROOT_DIR + "models/"

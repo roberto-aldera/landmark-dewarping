@@ -18,9 +18,9 @@ import time
 def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_csv_export=True):
     raw_pose_results = []
     network_pose_results = []
-    # num_samples = 500
-    num_samples = min(len(data_loader.dataset), settings.TOTAL_SAMPLES)
-    quantile_width = 0.3
+    num_samples = 1000
+    # num_samples = min(len(data_loader.dataset), settings.TOTAL_SAMPLES)
+    quantile_width = 0.5
     quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)
     print("Running for", num_samples, "samples...")
 
@@ -32,13 +32,16 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
         raw_thetas = raw_CMEs[:, 0].type(torch.FloatTensor)
         raw_curvatures = raw_CMEs[:, 1].type(torch.FloatTensor)
 
+        sorted_thetas, sorted_indices = torch.sort(raw_thetas)
+        sorted_curvatures = raw_curvatures[sorted_indices]
+
         # Grab indices where theta is in a certain acceptable range
-        theta_quantiles = torch.quantile(raw_thetas, quantiles)
-        inlier_indices = torch.where((raw_thetas >= theta_quantiles[0]) & (raw_thetas <= theta_quantiles[1]))
+        theta_quantiles = torch.quantile(sorted_thetas, quantiles)
+        inlier_indices = torch.where((sorted_thetas >= theta_quantiles[0]) & (sorted_thetas <= theta_quantiles[1]))
 
         # Find dx, dy, dth for these indices
-        selected_thetas = raw_thetas[inlier_indices]
-        selected_radii = 1 / raw_curvatures[inlier_indices].type(torch.FloatTensor)
+        selected_thetas = sorted_thetas[inlier_indices]
+        selected_radii = 1 / sorted_curvatures[inlier_indices].type(torch.FloatTensor)
 
         phi = selected_thetas / 2  # this is because we're enforcing circular motion
         rho = 2 * selected_radii * torch.sin(phi)
@@ -51,38 +54,37 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
         final_pose = [d_x.mean().detach().numpy(), d_y.mean().detach().numpy(), selected_thetas.mean().detach().numpy()]
         raw_pose_results.append(final_pose)
 
-        # ------------------------- Fancier method here -------------------------#
-        from sklearn.cluster import KMeans
-        # from statistics import mode
-        from collections import Counter
-        kmeans = KMeans(n_clusters=8, random_state=0, tol=1e-6).fit(raw_thetas.reshape(-1, 1))
+        # ------------------------- Network predictions -------------------------#
+        # Get Circular Motion Estimates from from landmarks that have been corrected by network
+        predicted_scores, _ = model(landmarks)
+        if torch.sum(predicted_scores != 0):
+            predicted_scores = predicted_scores / torch.sum(predicted_scores)
         # pdb.set_trace()
-        counter = Counter(kmeans.labels_)
-        biggest_cluster_idx = counter.most_common(1)[0][0]  # just take first biggest for now
-        # biggest_cluster_idx = mode(kmeans.labels_)  # TODO: if two clusters are both same size, use both
-        # -> maybe if clusters are similar size, use both. So if second biggest is like 95% the same size or something
+        # Get poses, and then weight each match by the score
+        unsorted_thetas = raw_CMEs[:, 0].type(torch.FloatTensor)
+        sorted_thetas, sorted_indices = torch.sort(unsorted_thetas)
+        curvatures = raw_CMEs[:, 1].type(torch.FloatTensor)
+        curvatures = curvatures[sorted_indices]
+        radii = 1 / curvatures.type(torch.FloatTensor)
 
-        thetas_in_largest_cluster = raw_thetas[kmeans.labels_ == biggest_cluster_idx]
-        radii_in_largest_cluster = 1 / raw_curvatures[kmeans.labels_ == biggest_cluster_idx].type(torch.FloatTensor)
-
-        phi = thetas_in_largest_cluster / 2  # this is because we're enforcing circular motion
-        rho = 2 * radii_in_largest_cluster * torch.sin(phi)
+        phi = sorted_thetas / 2  # this is because we're enforcing circular motion
+        rho = 2 * radii * torch.sin(phi)
         d_x = rho * torch.cos(phi)  # forward motion
         d_y = rho * torch.sin(phi)  # lateral motion
         # Special cases
-        d_x[radii_in_largest_cluster == float('inf')] = 0
-        d_y[radii_in_largest_cluster == float('inf')] = 0
+        d_x[radii == float('inf')] = 0
+        d_y[radii == float('inf')] = 0
 
-        final_pose = [d_x.mean().detach().numpy(), d_y.mean().detach().numpy(),
-                      thetas_in_largest_cluster.mean().detach().numpy()]
+        # Weight all dx, dy, dth by the (normalised) scores, and sum to get final pose
+        d_x = d_x * predicted_scores
+        d_y = d_y * predicted_scores
+        d_th = sorted_thetas * predicted_scores
+
+        final_pose = torch.cat((torch.sum(d_x, dim=1).unsqueeze(1), torch.sum(d_y, dim=1).unsqueeze(1),
+                                torch.sum(d_th, dim=1).unsqueeze(1)), dim=1)
+
+        final_pose = final_pose.detach().numpy()[0]
         network_pose_results.append(final_pose)
-
-        # ------------------------- Network predictions -------------------------#
-        # Get Circular Motion Estimates from from landmarks that have been corrected by network
-        # predicted_scores = model(landmarks)
-
-        # final_pose = predicted_poses.detach().numpy()[0]
-        # network_pose_results.append(final_pose)
 
     # Get poses from raw CMEs
     raw_motion_estimates = []
