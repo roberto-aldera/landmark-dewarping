@@ -56,34 +56,8 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
 
         # ------------------------- Network predictions -------------------------#
         # Get Circular Motion Estimates from from landmarks that have been corrected by network
-        predicted_scores, _ = model(landmarks)
-        if torch.sum(predicted_scores != 0):
-            predicted_scores = predicted_scores / torch.sum(predicted_scores)
-        # pdb.set_trace()
-        # Get poses, and then weight each match by the score
-        unsorted_thetas = raw_CMEs[:, 0].type(torch.FloatTensor)
-        sorted_thetas, sorted_indices = torch.sort(unsorted_thetas)
-        curvatures = raw_CMEs[:, 1].type(torch.FloatTensor)
-        curvatures = curvatures[sorted_indices]
-        radii = 1 / curvatures.type(torch.FloatTensor)
-
-        phi = sorted_thetas / 2  # this is because we're enforcing circular motion
-        rho = 2 * radii * torch.sin(phi)
-        d_x = rho * torch.cos(phi)  # forward motion
-        d_y = rho * torch.sin(phi)  # lateral motion
-        # Special cases
-        d_x[radii == float('inf')] = 0
-        d_y[radii == float('inf')] = 0
-
-        # Weight all dx, dy, dth by the (normalised) scores, and sum to get final pose
-        d_x = d_x * predicted_scores
-        d_y = d_y * predicted_scores
-        d_th = sorted_thetas * predicted_scores
-
-        final_pose = torch.cat((torch.sum(d_x, dim=1).unsqueeze(1), torch.sum(d_y, dim=1).unsqueeze(1),
-                                torch.sum(d_th, dim=1).unsqueeze(1)), dim=1)
-
-        final_pose = final_pose.detach().numpy()[0]
+        predicted_pose = model(landmarks)
+        final_pose = predicted_pose.detach().numpy()[0]
         network_pose_results.append(final_pose)
 
     # Get poses from raw CMEs
