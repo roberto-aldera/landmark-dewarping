@@ -57,7 +57,7 @@ def plot_scores_and_thetas(scores, thetas):
     ax[1].grid()
     # ax[1].plot(sorted_thetas.detach().numpy()[0], '.')
     thetas_np = thetas.detach().numpy()[0]
-    threshold = 0.01
+    threshold = 0.5
     candidates = np.where(scores > threshold)
     inliers = scores[candidates]
 

@@ -56,8 +56,29 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
 
         # ------------------------- Network predictions -------------------------#
         # Get Circular Motion Estimates from from landmarks that have been corrected by network
-        predicted_pose = model(landmarks)
-        final_pose = predicted_pose.detach().numpy()[0]
+        scores, _ = model(landmarks)
+        scores = scores / torch.sum(scores)
+        raw_thetas = raw_CMEs[:, 0].type(torch.FloatTensor)
+        raw_curvatures = raw_CMEs[:, 1].type(torch.FloatTensor)
+        radii = 1 / raw_curvatures.type(torch.FloatTensor)
+
+        phi = raw_thetas / 2  # this is because we're enforcing circular motion
+        rho = 2 * radii * torch.sin(phi)
+        d_x = rho * torch.cos(phi)  # forward motion
+        d_y = rho * torch.sin(phi)  # lateral motion
+        # Special cases
+        d_x[radii == float('inf')] = 0
+        d_y[radii == float('inf')] = 0
+
+        # Weight all dx, dy, dth by the (normalised) scores, and sum to get final pose
+        d_x = d_x * scores
+        d_y = d_y * scores
+        d_th = raw_thetas * scores
+
+        final_pose = torch.cat((torch.sum(d_x, dim=1).unsqueeze(1), torch.sum(d_y, dim=1).unsqueeze(1),
+                                torch.sum(d_th, dim=1).unsqueeze(1)), dim=1)
+
+        final_pose = final_pose.detach().numpy()[0]
         network_pose_results.append(final_pose)
 
     # Get poses from raw CMEs
@@ -105,7 +126,7 @@ if __name__ == "__main__":
 
     # Prepare model for evaluation
     print("Loading model from:", params.model_path)
-    model = ScoreNet(params)
+    model = PointNet(params)
     model = model.load_from_checkpoint(params.model_path)
     model.eval()
 

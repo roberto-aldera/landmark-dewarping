@@ -17,7 +17,7 @@ if __name__ == '__main__':
     parser = ArgumentParser(add_help=False)
     parser = pl.Trainer.add_argparse_args(parser)
 
-    parser.add_argument("--model_name", type=str, default="scorenet")
+    parser.add_argument("--model_name", type=str, default="pointnet")
     # parser.add_argument('--num_samples_to_evaluate', type=int, default=50, help="...")
 
     temp_args, _ = parser.parse_known_args()

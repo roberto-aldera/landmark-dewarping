@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import random_split, DataLoader, Dataset
+from torch.utils.data import random_split, DataLoader, Dataset, WeightedRandomSampler
 import pytorch_lightning as pl
 from torchvision import transforms
 import os
@@ -17,6 +17,7 @@ class CustomDataset(Dataset):
         self.training_set_size = 0
         self.validation_set_size = 0
         self.transform = transform
+        self.sampling_weights = None
 
         dataset_index_file = self.data_root + "dataset_index.txt"
 
@@ -24,6 +25,7 @@ class CustomDataset(Dataset):
             self.landmark_file_names = [line.rstrip() for line in f]  # f.readlines()
 
         self.cm_parameters = pd.read_csv(self.data_root + "all_gt_poses.csv", header=None)
+        self.sampling_weights = np.abs(self.cm_parameters[1].values) + 1e-4  # use thetas as sampling weights
 
         self.training_set_size = int(len(self.landmark_file_names) * settings.TRAIN_RATIO)
         self.validation_set_size = len(self.landmark_file_names) - self.training_set_size
@@ -32,8 +34,8 @@ class CustomDataset(Dataset):
         return len(self.landmark_file_names)
 
     def __getitem__(self, index):
-        if torch.is_tensor(index):
-            index = index.tolist()
+        # if torch.is_tensor(index):
+        # index = index.tolist()
         landmarks = pd.read_csv(self.landmark_file_names[index], header=None)
         sample = {'landmarks': landmarks, 'cm_parameters': self.cm_parameters.iloc[index, 1:3]}
 
@@ -71,6 +73,7 @@ class SingleDataset:
         all_cm_parameters = pd.read_csv(self.data_root + "gt_poses.csv", header=None)
         # Get the cm parameters for this particular match set (just theta and curvature)
         cm_parameters = all_cm_parameters.iloc[idx, 1:3]
+
         sample = {'landmarks': landmarks, 'cm_parameters': cm_parameters}
 
         if self.transform:
@@ -132,6 +135,8 @@ class LandmarksDataModule(pl.LightningDataModule):
         self.train_data = None
         self.valid_data = None
         self.test_data = None
+        self.training_sampler = None
+        self.validation_sampler = None
 
     # def prepare_data(self):
     #     raise NotImplementedError
@@ -146,12 +151,22 @@ class LandmarksDataModule(pl.LightningDataModule):
                                                         [data_full.training_set_size, data_full.validation_set_size])
         self.test_data = None
 
+        train_sampling_weights = torch.from_numpy(data_full.sampling_weights[self.train_data.indices])
+        train_sampling_weights = train_sampling_weights.double()
+        validation_sampling_weights = torch.from_numpy(data_full.sampling_weights[self.valid_data.indices])
+        validation_sampling_weights = validation_sampling_weights.double()
+
+        self.training_sampler = WeightedRandomSampler(train_sampling_weights, len(self.train_data))
+        self.validation_sampler = WeightedRandomSampler(validation_sampling_weights, len(self.valid_data))
+
     def train_dataloader(self):
-        return DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True, num_workers=4)
+        return DataLoader(self.train_data, batch_size=self.batch_size, num_workers=4,
+                          sampler=self.training_sampler)
         # collate_fn=CollateFn)
 
     def val_dataloader(self):
-        return DataLoader(self.valid_data, batch_size=self.batch_size, num_workers=4)
+        return DataLoader(self.valid_data, batch_size=self.batch_size,
+                          num_workers=4)  # , sampler=self.validation_sampler)
 
     def test_dataloader(self):
         return DataLoader(self.test_data, batch_size=self.batch_size)
