@@ -34,7 +34,7 @@ AUX0_NAME = "CC"
 AUX1_NAME = "Corrected-CC"
 
 # Bools
-IS_RUNNING_ON_SERVER = True
+IS_RUNNING_ON_SERVER = False
 
 if IS_RUNNING_ON_SERVER is True:
     ROOT_DIR = "/Volumes/scratchdata/roberto/landmark-dewarping/"

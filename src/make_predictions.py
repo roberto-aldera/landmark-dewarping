@@ -32,53 +32,30 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
         raw_thetas = raw_CMEs[:, 0].type(torch.FloatTensor)
         raw_curvatures = raw_CMEs[:, 1].type(torch.FloatTensor)
 
-        sorted_thetas, sorted_indices = torch.sort(raw_thetas)
-        sorted_curvatures = raw_curvatures[sorted_indices]
-
         # Grab indices where theta is in a certain acceptable range
-        theta_quantiles = torch.quantile(sorted_thetas, quantiles)
-        inlier_indices = torch.where((sorted_thetas >= theta_quantiles[0]) & (sorted_thetas <= theta_quantiles[1]))
+        theta_quantiles = torch.quantile(raw_thetas, quantiles)
+        inlier_indices = torch.where((raw_thetas >= theta_quantiles[0]) & (raw_thetas <= theta_quantiles[1]))
 
         # Find dx, dy, dth for these indices
-        selected_thetas = sorted_thetas[inlier_indices]
-        selected_radii = 1 / sorted_curvatures[inlier_indices].type(torch.FloatTensor)
-
-        phi = selected_thetas / 2  # this is because we're enforcing circular motion
-        rho = 2 * selected_radii * torch.sin(phi)
-        d_x = rho * torch.cos(phi)  # forward motion
-        d_y = rho * torch.sin(phi)  # lateral motion
-        # Special cases
-        d_x[selected_radii == float('inf')] = 0
-        d_y[selected_radii == float('inf')] = 0
-
-        final_pose = [d_x.mean().detach().numpy(), d_y.mean().detach().numpy(), selected_thetas.mean().detach().numpy()]
+        selected_thetas = raw_thetas[inlier_indices]
+        selected_radii = 1 / raw_curvatures[inlier_indices].type(torch.FloatTensor)
+        final_pose = get_pose_from_cm_parameters_with_mean(selected_thetas, selected_radii)
         raw_pose_results.append(final_pose)
 
         # ------------------------- Network predictions -------------------------#
         # Get Circular Motion Estimates from from landmarks that have been corrected by network
         scores, _ = model(landmarks)
-        scores = scores / torch.sum(scores)
         raw_thetas = raw_CMEs[:, 0].type(torch.FloatTensor)
         raw_curvatures = raw_CMEs[:, 1].type(torch.FloatTensor)
-        radii = 1 / raw_curvatures.type(torch.FloatTensor)
 
-        phi = raw_thetas / 2  # this is because we're enforcing circular motion
-        rho = 2 * radii * torch.sin(phi)
-        d_x = rho * torch.cos(phi)  # forward motion
-        d_y = rho * torch.sin(phi)  # lateral motion
-        # Special cases
-        d_x[radii == float('inf')] = 0
-        d_y[radii == float('inf')] = 0
+        threshold = min(torch.max(scores), 0.5)
+        inlier_indices = torch.where((scores >= threshold))
+        inlier_indices = inlier_indices[1]
 
-        # Weight all dx, dy, dth by the (normalised) scores, and sum to get final pose
-        d_x = d_x * scores
-        d_y = d_y * scores
-        d_th = raw_thetas * scores
-
-        final_pose = torch.cat((torch.sum(d_x, dim=1).unsqueeze(1), torch.sum(d_y, dim=1).unsqueeze(1),
-                                torch.sum(d_th, dim=1).unsqueeze(1)), dim=1)
-
-        final_pose = final_pose.detach().numpy()[0]
+        # Find dx, dy, dth for these indices
+        selected_thetas = raw_thetas[inlier_indices]
+        selected_radii = 1 / raw_curvatures[inlier_indices].type(torch.FloatTensor)
+        final_pose = get_pose_from_cm_parameters_with_mean(selected_thetas, selected_radii)
         network_pose_results.append(final_pose)
 
     # Get poses from raw CMEs
@@ -109,11 +86,24 @@ def do_prediction_and_optionally_export_csv(model, data_loader, export_path, do_
                                        pose_source="network_cm", export_folder=export_path)
 
 
+def get_pose_from_cm_parameters_with_mean(thetas, radii):
+    phi = thetas / 2  # this is because we're enforcing circular motion
+    rho = 2 * radii * torch.sin(phi)
+    d_x = rho * torch.cos(phi)  # forward motion
+    d_y = rho * torch.sin(phi)  # lateral motion
+    # Special cases
+    d_x[radii == float('inf')] = 0
+    d_y[radii == float('inf')] = 0
+
+    final_pose = [d_x.mean().detach().numpy(), d_y.mean().detach().numpy(), thetas.mean().detach().numpy()]
+    return final_pose
+
+
 if __name__ == "__main__":
-    current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
-    results_path = settings.RESULTS_DIR + current_time + "/"
-    Path(results_path).mkdir(parents=True, exist_ok=True)
-    # results_path = None  # just to stop folders being created while debugging
+    # current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
+    # results_path = settings.RESULTS_DIR + current_time + "/"
+    # Path(results_path).mkdir(parents=True, exist_ok=True)
+    results_path = None  # just to stop folders being created while debugging
     print("Results will be saved to:", results_path)
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--model_path', type=str,

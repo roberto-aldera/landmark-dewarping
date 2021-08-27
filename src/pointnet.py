@@ -157,8 +157,8 @@ class PointNet(pl.LightningModule):
         scores = self._forward(x)
 
         # Do some plotting
-        # if not settings.IS_RUNNING_ON_SERVER:
-        #     plot_scores_and_thetas(scores, estimated_thetas)
+        if not settings.IS_RUNNING_ON_SERVER:
+            plot_scores_and_thetas(scores, estimated_thetas)
 
         return scores, estimated_thetas
 
