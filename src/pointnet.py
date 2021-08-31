@@ -14,7 +14,7 @@ import settings
 from circular_motion_functions import CircularMotionEstimationBase
 from loss_functions import LossFunctionClassification
 from argparse import ArgumentParser
-from utilities import plot_scores_and_thetas
+from utilities import plot_scores_and_thetas, plot_thetas_in_batch
 import pdb
 
 
@@ -157,8 +157,10 @@ class PointNet(pl.LightningModule):
         scores = self._forward(x)
 
         # Do some plotting
-        if not settings.IS_RUNNING_ON_SERVER:
-            plot_scores_and_thetas(scores, estimated_thetas)
+        # if not settings.IS_RUNNING_ON_SERVER:
+            # pdb.set_trace()
+            # plot_scores_and_thetas(scores, estimated_thetas)
+            # plot_thetas_in_batch(estimated_thetas)
 
         return scores, estimated_thetas
 

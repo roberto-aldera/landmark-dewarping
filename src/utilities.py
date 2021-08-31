@@ -83,6 +83,18 @@ def plot_scores_and_thetas(scores, thetas):
     pdb.set_trace()
 
 
+def plot_thetas_in_batch(thetas):
+    plt.figure(figsize=(15, 10))
+    plt.grid()
+    plt.plot(thetas[0:30], '.', label="Thetas")
+
+    plt.title("Debugging thetas")
+    plt.savefig("%s%s" % (settings.RESULTS_DIR, "debugging-thetas.pdf"))
+    plt.close()
+    print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "debugging-thetas.pdf"))
+    pdb.set_trace()
+
+
 def plot_quantiles_and_thetas(predicted_quantiles, thetas):
     quantile_width = 0.75
     quantiles = torch.tensor([0.5 - (quantile_width / 2), 0.5 + (quantile_width / 2)], dtype=torch.float32)

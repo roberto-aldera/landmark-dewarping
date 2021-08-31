@@ -22,7 +22,7 @@ ARCHITECTURE_TYPE = "scorenet"
 # Training parameters
 NUM_CPUS = 8
 MAX_EPOCHS = 5
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4
 BATCH_SIZE = 128
 
 # Metrics
