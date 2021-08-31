@@ -84,12 +84,21 @@ def plot_scores_and_thetas(scores, thetas):
 
 
 def plot_thetas_in_batch(thetas):
-    plt.figure(figsize=(15, 10))
-    plt.grid()
-    plt.plot(thetas[0:30], '.', label="Thetas")
+    fig, ax = plt.subplots(2, 2, figsize=(15, 10))
+    ax[0, 0].grid()
+    ax[0, 0].plot(thetas[0:30], '.')
 
-    plt.title("Debugging thetas")
-    plt.savefig("%s%s" % (settings.RESULTS_DIR, "debugging-thetas.pdf"))
+    ax[0, 1].grid()
+    ax[0, 1].plot(np.mean(thetas.detach().numpy(), axis=1), '.', label="Means of each batch")
+    ax[0, 1].legend()
+
+    ax[1, 1].grid()
+    ax[1, 1].plot(np.abs(np.mean(thetas.detach().numpy(), axis=1)), '.', label="Abs means of each batch")
+    ax[1, 1].text(0, 0.1, ("%s%s" % ("Mean = ", str(np.mean(np.abs(np.mean(thetas.detach().numpy(), axis=1)))))))
+    ax[1, 1].legend()
+
+    fig.suptitle("Debugging thetas")
+    fig.savefig("%s%s" % (settings.RESULTS_DIR, "debugging-thetas.pdf"))
     plt.close()
     print("Saved figure to:", "%s%s" % (settings.RESULTS_DIR, "debugging-thetas.pdf"))
     pdb.set_trace()
