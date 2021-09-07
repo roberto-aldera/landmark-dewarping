@@ -100,10 +100,10 @@ def get_pose_from_cm_parameters_with_mean(thetas, radii):
 
 
 if __name__ == "__main__":
-    # current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
-    # results_path = settings.RESULTS_DIR + current_time + "/"
-    # Path(results_path).mkdir(parents=True, exist_ok=True)
-    results_path = None  # just to stop folders being created while debugging
+    current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
+    results_path = settings.RESULTS_DIR + current_time + "/"
+    Path(results_path).mkdir(parents=True, exist_ok=True)
+    # results_path = None  # just to stop folders being created while debugging
     print("Results will be saved to:", results_path)
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--model_path', type=str,

@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.callbacks import ModelCheckpoint
 from argparse import ArgumentParser
 from pathlib import Path
 import time
@@ -36,9 +37,9 @@ if __name__ == '__main__':
     if params.model_name == "scorenet":
         model = ScoreNet(params)
 
-    trainer = pl.Trainer.from_argparse_args(params,
-                                            default_root_dir=settings.MODEL_DIR,
-                                            max_epochs=params.max_num_epochs)
+    checkpoint_callback = ModelCheckpoint(monitor="val_loss", save_top_k=3, save_last=True)
+    trainer = pl.Trainer.from_argparse_args(params, default_root_dir=settings.MODEL_DIR,
+                                            max_epochs=params.max_num_epochs, callbacks=[checkpoint_callback])
     # gradient_clip_val=0.05)  # here if required
     dm = LandmarksDataModule()
     trainer.fit(model, dm)

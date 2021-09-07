@@ -92,6 +92,9 @@ def plot_thetas_in_batch(thetas):
     ax[0, 1].plot(np.mean(thetas.detach().numpy(), axis=1), '.', label="Means of each batch")
     ax[0, 1].legend()
 
+    ax[1, 0].grid()
+    ax[1, 0].hist(np.abs(np.mean(thetas.detach().numpy(), axis=1)), density=True, bins=30)
+
     ax[1, 1].grid()
     ax[1, 1].plot(np.abs(np.mean(thetas.detach().numpy(), axis=1)), '.', label="Abs means of each batch")
     ax[1, 1].text(0, 0.1, ("%s%s" % ("Mean = ", str(np.mean(np.abs(np.mean(thetas.detach().numpy(), axis=1)))))))

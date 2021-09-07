@@ -25,7 +25,9 @@ class CustomDataset(Dataset):
             self.landmark_file_names = [line.rstrip() for line in f]  # f.readlines()
 
         self.cm_parameters = pd.read_csv(self.data_root + "all_gt_poses.csv", header=None)
-        self.sampling_weights = np.abs(self.cm_parameters[1].values) + 1e-4  # use thetas as sampling weights
+        self.sampling_weights = np.abs(self.cm_parameters[1].values) + 1e-9  # use thetas as sampling weights
+        self.sampling_weights[self.sampling_weights < 0.05] *= 1e-4
+        # pdb.set_trace()
 
         self.training_set_size = int(len(self.landmark_file_names) * settings.TRAIN_RATIO)
         self.validation_set_size = len(self.landmark_file_names) - self.training_set_size

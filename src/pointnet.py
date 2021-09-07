@@ -80,7 +80,7 @@ class PointNetEncoder(nn.Module):
         x = torch.bmm(x.transpose(2, 1), trans).transpose(2, 1)
         x = F.relu(self.bn1(self.conv1(x)))
         if self.feature_transform:
-            trans_feat = self.fstn(x)  # I wonder if this should be split in 2 too
+            trans_feat = self.fstn(x)
             x = x.transpose(2, 1)
             x = torch.bmm(x, trans_feat)
             x = x.transpose(2, 1)
@@ -105,7 +105,7 @@ class PointNet(pl.LightningModule):
         self.hparams = hparams
         self.k = 1  # just predict a score for each match
         self.feat = PointNetEncoder(global_feat=False, feature_transform=True, channel=2)
-        self.conv1 = torch.nn.Conv1d(1088 * 2, 512, 1)
+        self.conv1 = torch.nn.Conv1d(1088 * 2 + 1, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
         self.conv4 = torch.nn.Conv1d(128, self.k, 1)
@@ -135,7 +135,7 @@ class PointNet(pl.LightningModule):
         # Initialise last conv weights to 0 to ensure the initial correction is zero/small (?)
         # self.net[-1].weight.data.zero_()
 
-    def _forward(self, x):
+    def _forward(self, x, thetas):
         b, n, c = x.shape
         x = x.transpose(1, 2).float()
         # Split landmarks and pass them through encoder individually
@@ -144,7 +144,8 @@ class PointNet(pl.LightningModule):
         x1, _ = self.feat(x1)
         x2, _ = self.feat(x2)
         x = torch.cat((x1, x2), dim=1)
-
+        x = torch.cat((x, thetas.unsqueeze(1).to(self.device)), dim=1)
+        # pdb.set_trace()
         x = self.net(x)
         x = x.transpose(2, 1).contiguous()
         scores = x.view(b, n)  # , self.k)
@@ -154,13 +155,13 @@ class PointNet(pl.LightningModule):
     def forward(self, x):
         cme_parameters = self.cme(x)
         estimated_thetas = cme_parameters[:, :, 0].to(self.device).type(torch.FloatTensor)
-        scores = self._forward(x)
+        scores = self._forward(x, estimated_thetas)
 
         # Do some plotting
-        if not settings.IS_RUNNING_ON_SERVER:
-            # pdb.set_trace()
-            # plot_scores_and_thetas(scores, estimated_thetas)
-            plot_thetas_in_batch(estimated_thetas)
+        # if not settings.IS_RUNNING_ON_SERVER:
+        # pdb.set_trace()
+        # plot_scores_and_thetas(scores, estimated_thetas)
+        # plot_thetas_in_batch(estimated_thetas)
 
         return scores, estimated_thetas
 
@@ -198,9 +199,9 @@ class PointNet(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    x = torch.rand((32, 600, 4))
+    x = torch.rand((128, 600, 4))
     hparams = {}
     net = PointNet(hparams)
-    y = net._forward(x)[0]
+    y = net.forward(x)[0]
     # plot_grad_flow(net.named_parameters())
     pdb.set_trace()

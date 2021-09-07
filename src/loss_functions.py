@@ -82,6 +82,28 @@ class LossFunctionClassification(nn.Module):
         return loss
 
 
+class LossFunctionClassificationWithGT(nn.Module):
+    def __init__(self, device):
+        super().__init__()
+        self.device = device
+
+    def forward(self, scores_and_thetas, target):
+        scores = scores_and_thetas[0]
+        thetas = scores_and_thetas[1]
+        target = target.to(self.device)
+        gt_theta = target[:, 0]
+
+        # Grab indices where theta is in a certain acceptable range
+        delta = (0.05 * gt_theta).to(self.device)
+        upper_values = gt_theta + delta
+        lower_values = gt_theta - delta
+        y_target = torch.where(((thetas >= lower_values.unsqueeze(1)) & (thetas <= upper_values.unsqueeze(1))), 1., 0.)
+
+        loss_function = nn.BCEWithLogitsLoss()
+        loss = loss_function(scores.to(self.device), y_target.to(self.device))
+        return loss
+
+
 class LossFunctionFinalPoseVsCmeGt(nn.Module):
     def __init__(self, device):
         super().__init__()
