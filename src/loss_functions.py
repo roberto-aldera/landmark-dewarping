@@ -110,6 +110,7 @@ class LossFunctionFinalPoseVsCmeGt(nn.Module):
         self.device = device
 
     def forward(self, estimate, target):
+        # pdb.set_trace() #TODO: fix nan loss.
         # Convert target to x, y, theta
         target = target.to(self.device)
         gt_theta = target[:, 0]
@@ -126,6 +127,7 @@ class LossFunctionFinalPoseVsCmeGt(nn.Module):
         x_y_th_weights = torch.tensor([1, 1, 1]).to(self.device)  # out of thin air for now
         weighted_pose_error = ((estimate.to(self.device) - pose_target) ** 2) * x_y_th_weights
         loss = torch.mean(weighted_pose_error)
+        loss.requires_grad = True
         return loss
 
 

@@ -12,7 +12,7 @@ from torch.autograd import Variable
 import pytorch_lightning as pl
 import settings
 from circular_motion_functions import CircularMotionEstimationBase
-from loss_functions import LossFunctionClassification
+from loss_functions import LossFunctionFinalPoseVsCmeGt
 from argparse import ArgumentParser
 from utilities import plot_scores_and_thetas, plot_thetas_in_batch
 import pdb
@@ -105,7 +105,7 @@ class PointNet(pl.LightningModule):
         self.hparams = hparams
         self.k = 1  # just predict a score for each match
         self.feat = PointNetEncoder(global_feat=False, feature_transform=True, channel=2)
-        self.conv1 = torch.nn.Conv1d(1088 * 2 + 1, 512, 1)
+        self.conv1 = torch.nn.Conv1d(1088 * 2, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
         self.conv4 = torch.nn.Conv1d(128, self.k, 1)
@@ -116,7 +116,7 @@ class PointNet(pl.LightningModule):
                                  nn.ReLU(), self.conv4, nn.Sigmoid())
 
         self.cme = CircularMotionEstimationBase()
-        self.loss = LossFunctionClassification(self.device)
+        self.loss = LossFunctionFinalPoseVsCmeGt(self.device)
 
         self._initialise_weights()
 
@@ -135,7 +135,7 @@ class PointNet(pl.LightningModule):
         # Initialise last conv weights to 0 to ensure the initial correction is zero/small (?)
         # self.net[-1].weight.data.zero_()
 
-    def _forward(self, x, thetas):
+    def _forward(self, x):
         b, n, c = x.shape
         x = x.transpose(1, 2).float()
         # Split landmarks and pass them through encoder individually
@@ -144,8 +144,7 @@ class PointNet(pl.LightningModule):
         x1, _ = self.feat(x1)
         x2, _ = self.feat(x2)
         x = torch.cat((x1, x2), dim=1)
-        x = torch.cat((x, thetas.unsqueeze(1).to(self.device)), dim=1)
-        # pdb.set_trace()
+
         x = self.net(x)
         x = x.transpose(2, 1).contiguous()
         scores = x.view(b, n)  # , self.k)
@@ -154,8 +153,34 @@ class PointNet(pl.LightningModule):
 
     def forward(self, x):
         cme_parameters = self.cme(x)
-        estimated_thetas = cme_parameters[:, :, 0].to(self.device).type(torch.FloatTensor)
-        scores = self._forward(x, estimated_thetas)
+        # estimated_thetas = cme_parameters[:, :, 0].to(self.device).type(torch.FloatTensor)
+        scores = self._forward(x)
+
+        threshold = min(torch.max(scores), 0.5)
+        b, n, _ = x.shape
+        mask = torch.zeros(b, n)
+        mask[scores > threshold] = 1
+
+        # Find dx, dy, dth for these indices
+        raw_thetas = cme_parameters[:, :, 0].to(self.device).type(torch.FloatTensor)
+        raw_curvatures = cme_parameters[:, :, 1].to(self.device).type(torch.FloatTensor)
+        raw_radii = 1 / raw_curvatures.type(torch.FloatTensor)
+
+        phi = raw_thetas / 2  # this is because we're enforcing circular motion
+        rho = 2 * raw_radii * torch.sin(phi)
+        d_x = rho * torch.cos(phi)  # forward motion
+        d_y = rho * torch.sin(phi)  # lateral motion
+        # Special cases
+        d_x[raw_radii == float('inf')] = 0
+        d_y[raw_radii == float('inf')] = 0
+
+        denominator = mask.sum(dim=1) + 1e-9
+        d_x_mean = (d_x * mask).sum(dim=1) / denominator
+        d_y_mean = (d_y * mask).sum(dim=1) / denominator
+        d_th_mean = (raw_thetas * mask).sum(dim=1) / denominator
+        # pdb.set_trace()
+        # mean must exclude zero values
+        final_pose = torch.stack((d_x_mean, d_y_mean, d_th_mean), dim=1)
 
         # Do some plotting
         # if not settings.IS_RUNNING_ON_SERVER:
@@ -163,17 +188,17 @@ class PointNet(pl.LightningModule):
         # plot_scores_and_thetas(scores, estimated_thetas)
         # plot_thetas_in_batch(estimated_thetas)
 
-        return scores, estimated_thetas
+        return final_pose
 
     def training_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        loss = self.loss(self.forward(x))
+        loss = self.loss(self.forward(x), y)
         self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
         x, y = batch['landmarks'], batch['cm_parameters']
-        loss = self.loss(self.forward(x))
+        loss = self.loss(self.forward(x), y)
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
